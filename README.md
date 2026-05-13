@@ -1,3 +1,12 @@
+---
+title: DebateBot
+sdk: docker
+app_port: 8080
+pinned: false
+license: mit
+short_description: An AI that disagrees with you, three different ways
+---
+
 # DebateBot
 
 An AI that disagrees with you — three different ways. Built to pressure-test
