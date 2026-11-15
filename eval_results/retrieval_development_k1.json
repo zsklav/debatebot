@@ -1,0 +1,144 @@
+{
+  "split": "development",
+  "recorded_at": "2026-11-14T10:21:45.534853+00:00",
+  "embedding_model": "fastembed-0.9.1:BAAI/bge-small-en-v1.5:v1:cfd1cccecffbc9604cd1cefe71ac6c8cbfad912764f679968a284dc2169b315a",
+  "dimension": 384,
+  "k": 1,
+  "sources": [
+    {
+      "source_id": "bloom-han-liang-2024-hybrid",
+      "content_hash": "76c859548f05bbc9a5d5d17b9c0be0e0b6e388b6803e663d12a721482c6b1e8a"
+    },
+    {
+      "source_id": "gibbs-mengel-siemroth-2024-innovation",
+      "content_hash": "7e2dcbf5ccd6fa72517a6de274c755b512ae487b41484a1959d477c339f70f04"
+    }
+  ],
+  "chunk_words": 80,
+  "overlap_words": 16,
+  "answerable_cases": 6,
+  "no_evidence_cases": 2,
+  "mean_passage_recall_at_k": 0.5833333333333334,
+  "evidence_hit_rate_at_k": 0.6666666666666666,
+  "metric_definition": "Recall counts every chunk containing the annotated substring, including overlapping duplicates. Hit rate counts queries retrieving at least one such chunk.",
+  "warning": "Tiny curated development set; not held-out accuracy or factual verification. Nearest results are not truth judgments.",
+  "cases": [
+    {
+      "id": "retention",
+      "query": "Did allowing some home working reduce employee resignations?",
+      "recall_at_k": 0.0,
+      "relevant_chunk_ids": [
+        "1ad4311bcaf3b459c2d18a9e4f2b6c03049fd3708bd76470c02fdc62354f1caf"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df",
+          "source_id": "gibbs-mengel-siemroth-2024-innovation",
+          "score": 0.6406987801049935
+        }
+      ]
+    },
+    {
+      "id": "trial-design",
+      "query": "Which study randomized Chinese technology employees to a hybrid schedule?",
+      "recall_at_k": 1.0,
+      "relevant_chunk_ids": [
+        "1ad4311bcaf3b459c2d18a9e4f2b6c03049fd3708bd76470c02fdc62354f1caf"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "1ad4311bcaf3b459c2d18a9e4f2b6c03049fd3708bd76470c02fdc62354f1caf",
+          "source_id": "bloom-han-liang-2024-hybrid",
+          "score": 0.8268023185159821
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "query": "Did hybrid employees receive worse performance reviews or fewer promotions?",
+      "recall_at_k": 0.0,
+      "relevant_chunk_ids": [
+        "1ad4311bcaf3b459c2d18a9e4f2b6c03049fd3708bd76470c02fdc62354f1caf"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "979b74f94e76cec13022f3e204588f96686e0fa023aa5fc3e3f42986894476ed",
+          "source_id": "bloom-han-liang-2024-hybrid",
+          "score": 0.7493616403941891
+        }
+      ]
+    },
+    {
+      "id": "idea-quality",
+      "query": "What happened to the quality of ideas while employees worked from home?",
+      "recall_at_k": 1.0,
+      "relevant_chunk_ids": [
+        "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df",
+          "source_id": "gibbs-mengel-siemroth-2024-innovation",
+          "score": 0.7418066229185977
+        }
+      ]
+    },
+    {
+      "id": "coordination",
+      "query": "Why might unsynchronized office attendance hurt innovation?",
+      "recall_at_k": 0.5,
+      "relevant_chunk_ids": [
+        "17703f65db4247e1ccea4fe50b5f5f677116e0e23ba9132b233f2d96fc429d93",
+        "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df",
+          "source_id": "gibbs-mengel-siemroth-2024-innovation",
+          "score": 0.7598588989309571
+        }
+      ]
+    },
+    {
+      "id": "innovation-design",
+      "query": "What did the Indian IT company event study measure?",
+      "recall_at_k": 1.0,
+      "relevant_chunk_ids": [
+        "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df"
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "8f1812ceff9f170564284860a055465b4d6584a24eee790a8763d8a4ee2c14df",
+          "source_id": "gibbs-mengel-siemroth-2024-innovation",
+          "score": 0.6878660498663053
+        }
+      ]
+    },
+    {
+      "id": "missing-health",
+      "query": "Does remote work lower blood pressure?",
+      "recall_at_k": null,
+      "relevant_chunk_ids": [],
+      "retrieved": [
+        {
+          "chunk_id": "979b74f94e76cec13022f3e204588f96686e0fa023aa5fc3e3f42986894476ed",
+          "source_id": "bloom-han-liang-2024-hybrid",
+          "score": 0.541554075956165
+        }
+      ]
+    },
+    {
+      "id": "missing-schools",
+      "query": "How does hybrid school attendance affect examination results?",
+      "recall_at_k": null,
+      "relevant_chunk_ids": [],
+      "retrieved": [
+        {
+          "chunk_id": "17703f65db4247e1ccea4fe50b5f5f677116e0e23ba9132b233f2d96fc429d93",
+          "source_id": "gibbs-mengel-siemroth-2024-innovation",
+          "score": 0.6993387577603647
+        }
+      ]
+    }
+  ]
+}

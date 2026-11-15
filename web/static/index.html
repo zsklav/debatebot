@@ -1,239 +1,232 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DebateBot — pressure-test your arguments</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .msg-you { background: #1e3a5f; color: #e6f0ff; }
-  .msg-bot { background: #2d1f1f; color: #ffe6e6; }
-  .panel   { background: #1a1a1a; color: #e6e6e6; border: 1px solid #333; }
-  pre.transcript { white-space: pre-wrap; word-break: break-word; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171614" />
+  <title>DebateBot — Challenge your thinking</title>
+  <link rel="stylesheet" href="/static/evidence-lab.css?v=20261115f" />
 </head>
-<body class="bg-neutral-950 text-neutral-100 min-h-screen">
-
-<div class="max-w-5xl mx-auto p-6">
-
-  <header class="mb-6">
-    <h1 class="text-3xl font-bold">DebateBot</h1>
-    <p class="text-neutral-400">An AI that disagrees with you, three different ways. Built to pressure-test arguments.</p>
-  </header>
-
-  <!-- Persona picker -->
-  <section id="persona-picker" class="mb-6">
-    <div class="text-sm text-neutral-400 mb-2">Pick a persona to debate with:</div>
-    <div id="persona-buttons" class="flex flex-wrap gap-2"></div>
+<body>
+  <section id="file-open-notice" hidden>
+    <h1>Start your local workspace</h1>
+    <p>Run this from the project folder, then open the local server:</p>
+    <pre>.\.venv\Scripts\python.exe -m uvicorn web.api:app --host 127.0.0.1 --port 8000</pre>
+    <a href="http://127.0.0.1:8000/">Open DebateBot →</a>
   </section>
-
-  <!-- Active debate -->
-  <section id="debate" class="hidden">
-    <div class="flex items-center justify-between mb-2">
-      <div id="active-persona" class="text-lg font-semibold"></div>
-      <div class="flex gap-2">
-        <button id="btn-score"    class="px-3 py-1 text-sm bg-neutral-800 hover:bg-neutral-700 rounded">Score argument</button>
-        <button id="btn-findhole" class="px-3 py-1 text-sm bg-neutral-800 hover:bg-neutral-700 rounded">Find the hole</button>
-        <button id="btn-newdebate" class="px-3 py-1 text-sm bg-red-900 hover:bg-red-800 rounded">New debate</button>
+  <script>
+    if (location.protocol === 'file:') {
+      document.getElementById('file-open-notice').hidden = false;
+      document.documentElement.setAttribute('data-file-open', 'true');
+    }
+  </script>
+  <div id="main-content" class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="DebateBot home"><span class="brand-symbol" aria-hidden="true">✳</span>DebateBot</a>
+    </header>
+    <main>
+<section class="account-card" aria-labelledby="auth-title">
+        <div class="account-copy">
+          <h2 id="auth-title">
+            Sign in to DebateBot
+          </h2>
+          <p id="account-description">
+            Sign in to save your debates and research results.
+          </p>
+          <p id="auth-user" hidden>
+          </p>
+        </div>
+        <div class="account-controls">
+          <form id="auth-form">
+            <div class="auth-fields">
+              <div>
+                <label for="auth-username">
+                  Username
+                </label>
+                <input id="auth-username" autocomplete="username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_-]{3,40}" placeholder="Your username" />
+            </div>
+            <div>
+              <label for="auth-password">
+                Password
+                <span class="label-hint">
+                  12–128 characters
+                </span>
+              </label>
+              <input id="auth-password" type="password" autocomplete="current-password" required minlength="12" maxlength="128" placeholder="Your password" />
+          </div>
+        </div>
+        <div class="auth-actions">
+          <button type="submit" value="login">
+            Sign in ↗
+          </button>
+          <button class="button-secondary" type="submit" value="register">
+            Create account
+          </button>
+        </div>
+      </form>
+      <button id="auth-logout" class="button-secondary" type="button" hidden>
+        Sign out
+      </button>
+      <p id="auth-status" class="status-text" role="status" aria-live="polite">
+        Checking sign-in…
+      </p>
+    </div>
+  </section>
+      <div id="app-workspace" class="character-workspace" hidden>
+        <div class="workspace-body">
+          <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
+            <button id="tab-debate" role="tab" aria-selected="true" aria-controls="view-debate" type="button" data-view="debate">Chat</button>
+            <button id="tab-evidence" role="tab" aria-selected="false" aria-controls="view-evidence" tabindex="-1" type="button" data-view="evidence">Evidence Lab</button>
+            <button id="tab-critique" role="tab" aria-selected="false" aria-controls="view-critique" tabindex="-1" type="button" data-view="critique">Quick critique</button>
+          </div>
+<section id="view-debate" class="workspace-section debate-room" role="tabpanel" aria-labelledby="tab-debate">
+    <section id="persona-picker">
+      <h2 id="debate-title">Choose a perspective.</h2>
+      <p id="debate-status" class="status-text" role="status">
+      </p>
+      <div id="persona-buttons" class="persona-grid">
       </div>
-    </div>
-
-    <div id="messages" class="space-y-3 mb-4 min-h-[200px]"></div>
-
-    <form id="turn-form" class="flex gap-2">
-      <input id="turn-input" type="text" autocomplete="off"
-        placeholder="Make a claim, then defend it..."
-        class="flex-1 p-3 rounded bg-neutral-900 border border-neutral-700 focus:border-neutral-400 outline-none" />
-      <button type="submit" class="px-4 py-3 bg-blue-700 hover:bg-blue-600 rounded font-semibold">Send</button>
+    </section>
+    <section id="debate" class="hidden">
+      <div class="debate-toolbar">
+        <h3 id="active-persona">
+        </h3>
+        <div class="button-group">
+          <button id="btn-score" class="button-secondary" type="button">
+            Score argument
+          </button>
+          <button id="btn-findhole" class="button-secondary" type="button">
+            Find the hole
+          </button>
+          <button id="btn-newdebate" class="button-secondary" type="button">
+            New debate
+          </button>
+        </div>
+      </div>
+      <div id="messages" aria-live="polite" aria-label="Debate messages">
+      </div>
+      <div class="chat-composer">
+      <form id="turn-form" class="turn-form">
+        <label class="sr-only" for="turn-input">
+          Your next argument
+        </label>
+        <input id="turn-input" autocomplete="off" maxlength="4000" placeholder="Make a claim, then defend it…" required />
+      <button type="submit">
+        Send ↗
+      </button>
     </form>
-    <div id="turn-meta" class="text-xs text-neutral-500 mt-1"></div>
+    <p id="turn-meta" class="helper" role="status"></p>
+      </div>
   </section>
-
-  <!-- Result panels -->
-  <section id="score-panel" class="hidden mt-6 panel rounded p-4"></section>
-  <section id="hole-panel"  class="hidden mt-6 panel rounded p-4"></section>
-
-  <hr class="border-neutral-800 my-8" />
-
-  <!-- Standalone find-the-hole -->
-  <section>
-    <h2 class="text-xl font-semibold mb-2">Or paste any argument and find the single weakest claim:</h2>
-    <textarea id="standalone-arg" rows="5"
-      placeholder="Paste a claim, paragraph, or whole essay..."
-      class="w-full p-3 rounded bg-neutral-900 border border-neutral-700 focus:border-neutral-400 outline-none"></textarea>
-    <button id="btn-standalone-findhole"
-      class="mt-2 px-4 py-2 bg-amber-700 hover:bg-amber-600 rounded font-semibold">Find the hole</button>
-    <section id="standalone-hole-panel" class="hidden mt-4 panel rounded p-4"></section>
+  <section id="score-panel" class="hidden panel">
   </section>
-
-</div>
-
-<script>
-let sessionId = null;
-let activePersonaName = null;
-
-const $ = (id) => document.getElementById(id);
-
-async function api(method, path, body) {
-  const opts = { method, headers: { "Content-Type": "application/json" } };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`${r.status} ${t}`);
-  }
-  return r.json();
-}
-
-// Load personas + build buttons
-async function loadPersonas() {
-  const { personas } = await api("GET", "/api/personas");
-  const container = $("persona-buttons");
-  container.innerHTML = "";
-  for (const p of personas) {
-    const btn = document.createElement("button");
-    btn.className = "flex-1 min-w-[200px] p-4 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded text-left";
-    btn.innerHTML = `<div class="font-semibold">${p.name}</div><div class="text-xs text-neutral-400 mt-1">${p.tagline}</div>`;
-    btn.onclick = () => startDebate(p.key, p.name);
-    container.appendChild(btn);
-  }
-}
-
-async function startDebate(personaKey, personaName) {
-  const r = await api("POST", "/api/debate", { persona_key: personaKey });
-  sessionId = r.session_id;
-  activePersonaName = r.persona_name;
-  $("persona-picker").classList.add("hidden");
-  $("debate").classList.remove("hidden");
-  $("active-persona").textContent = `Debating: ${activePersonaName}`;
-  $("messages").innerHTML = "";
-  $("score-panel").classList.add("hidden");
-  $("hole-panel").classList.add("hidden");
-  $("turn-input").focus();
-}
-
-function addMessage(who, text) {
-  const div = document.createElement("div");
-  const cls = who === "YOU" ? "msg-you" : "msg-bot";
-  div.className = `${cls} p-3 rounded`;
-  div.innerHTML = `<div class="text-xs opacity-70 mb-1">${who}</div><div class="whitespace-pre-wrap">${escapeHtml(text)}</div>`;
-  $("messages").appendChild(div);
-  div.scrollIntoView({ behavior: "smooth", block: "end" });
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-$("turn-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = $("turn-input");
-  const msg = input.value.trim();
-  if (!msg || !sessionId) return;
-  input.value = "";
-  addMessage("YOU", msg);
-  $("turn-meta").textContent = "Thinking...";
-  try {
-    const r = await api("POST", `/api/debate/${sessionId}/turn`, { message: msg });
-    addMessage(activePersonaName.toUpperCase(), r.reply);
-    $("turn-meta").textContent = `Turn ${r.turn_count} — ${r.total_tokens} tokens used so far`;
-  } catch (err) {
-    $("turn-meta").textContent = `Error: ${err.message}`;
-  }
-});
-
-$("btn-score").addEventListener("click", async () => {
-  if (!sessionId) return;
-  $("score-panel").classList.remove("hidden");
-  $("score-panel").innerHTML = "<div class='opacity-60'>Scoring...</div>";
-  try {
-    const s = await api("POST", `/api/debate/${sessionId}/score`);
-    $("score-panel").innerHTML = renderScore(s);
-  } catch (err) {
-    $("score-panel").innerHTML = `<div class='text-red-400'>Error: ${err.message}</div>`;
-  }
-});
-
-$("btn-findhole").addEventListener("click", async () => {
-  if (!sessionId) return;
-  $("hole-panel").classList.remove("hidden");
-  $("hole-panel").innerHTML = "<div class='opacity-60'>Locating the single weakest claim...</div>";
-  try {
-    const h = await api("POST", `/api/debate/${sessionId}/findhole`);
-    $("hole-panel").innerHTML = renderHole(h);
-  } catch (err) {
-    $("hole-panel").innerHTML = `<div class='text-red-400'>Error: ${err.message}</div>`;
-  }
-});
-
-$("btn-newdebate").addEventListener("click", () => {
-  sessionId = null;
-  $("debate").classList.add("hidden");
-  $("persona-picker").classList.remove("hidden");
-  $("score-panel").classList.add("hidden");
-  $("hole-panel").classList.add("hidden");
-});
-
-$("btn-standalone-findhole").addEventListener("click", async () => {
-  const arg = $("standalone-arg").value.trim();
-  if (!arg) return;
-  $("standalone-hole-panel").classList.remove("hidden");
-  $("standalone-hole-panel").innerHTML = "<div class='opacity-60'>Locating the single weakest claim...</div>";
-  try {
-    const h = await api("POST", "/api/findhole", { argument: arg });
-    $("standalone-hole-panel").innerHTML = renderHole(h);
-  } catch (err) {
-    $("standalone-hole-panel").innerHTML = `<div class='text-red-400'>Error: ${err.message}</div>`;
-  }
-});
-
-function renderBar(score) {
-  const pct = (score / 10) * 100;
-  const color = score >= 8 ? "bg-green-700" : score >= 5 ? "bg-yellow-700" : "bg-red-700";
-  return `<div class="w-full bg-neutral-800 rounded h-2 overflow-hidden"><div class="${color} h-2" style="width:${pct}%"></div></div>`;
-}
-
-function renderScore(s) {
-  const row = (label, axis) => `
-    <div class="mb-3">
-      <div class="flex justify-between text-sm mb-1"><span>${label}</span><span class="font-mono">${axis.score}/10</span></div>
-      ${renderBar(axis.score)}
-      <div class="text-xs text-neutral-400 mt-1">${escapeHtml(axis.rationale)}</div>
-    </div>`;
-  return `
-    <h3 class="text-lg font-semibold mb-3">Argument score — overall ${s.overall}/10</h3>
-    ${row("Logical coherence",    s.logical_coherence)}
-    ${row("Evidence quality",     s.evidence_quality)}
-    ${row("Opposition handling",  s.opposition_handling)}
-    ${row("Clarity",              s.clarity)}
-    <div class="mt-4 p-3 bg-neutral-900 rounded text-sm"><strong>Verdict:</strong> ${escapeHtml(s.summary)}</div>
-  `;
-}
-
-function renderHole(h) {
-  return `
-    <h3 class="text-lg font-semibold mb-2">The hole — severity ${h.severity}/10</h3>
-    <div class="mb-3">
-      <div class="text-xs text-neutral-400 uppercase tracking-wide">Weakest claim (verbatim)</div>
-      <div class="text-amber-200 italic mt-1">"${escapeHtml(h.weakest_claim)}"</div>
-    </div>
-    <div class="mb-3">
-      <div class="text-xs text-neutral-400 uppercase tracking-wide">Why it's weak</div>
-      <div class="mt-1">${escapeHtml(h.why_weak)}</div>
-    </div>
-    <div class="mb-3">
-      <div class="text-xs text-neutral-400 uppercase tracking-wide">The attack</div>
-      <div class="mt-1">${escapeHtml(h.the_attack)}</div>
-    </div>
-    <div>
-      <div class="text-xs text-neutral-400 uppercase tracking-wide">How to defend it</div>
-      <div class="mt-1 text-green-200">${escapeHtml(h.how_to_defend)}</div>
-    </div>
-  `;
-}
-
-loadPersonas();
-</script>
+  <section id="hole-panel" class="hidden panel">
+  </section>
+</section>
+<section id="view-evidence" class="workspace-section evidence-lab" role="tabpanel" aria-labelledby="tab-evidence" hidden>
+      <div class="section-heading">
+        <div>
+          <h2 id="lab-title">
+            Evidence Lab
+          </h2>
+          <p>
+            Test a claim against evidence.
+          </p>
+        </div>
+      </div>
+      <div class="lab-layout">
+        <div class="lab-composer">
+          <form id="lab-form">
+            <label for="lab-mode">
+              Mode
+            </label>
+            <select id="lab-mode">
+              <option value="evidence">
+                Find the hole + evidence (local)
+              </option>
+              <option value="research">
+                Research a claim (local corpus)
+              </option>
+              <option value="web_research">
+                Web research (public sources)
+              </option>
+            </select>
+            <p id="lab-mode-help" class="helper">
+              Identifies one weak claim, then assesses its factual support. Other claims are not checked.
+            </p>
+            <label for="lab-input">
+              Your claim
+            </label>
+            <textarea id="lab-input" rows="5" maxlength="4000" required placeholder="For example: A two-day hybrid schedule reduced quitting in the studied workforce."></textarea>
+            <div class="lab-actions">
+              <span id="lab-count">
+                0 / 4000
+              </span>
+              <button id="lab-submit" type="submit">
+                Analyze with evidence
+              </button>
+            </div>
+          </form>
+          <p id="lab-status" class="status-text" role="status" aria-live="polite">
+          </p>
+        </div>
+        <details class="scope-details">
+          <summary>Sources &amp; privacy · 2 local study summaries</summary>
+          <p><strong>Local research:</strong> Remote/hybrid-work summaries only. Other topics may have no evidence. Citations quote summaries, not the original papers.</p>
+          <p><strong>Web research:</strong> Queries go to external providers and public pages are read. Avoid confidential information. Availability and source quality vary.</p>
+          <p>Analysis uses API quota. Research activity appears after completion.</p>
+        </details>
+      </div>
+      <details class="saved-run">
+        <summary>
+          ↺
+          &nbsp;
+          Reopen a saved run
+        </summary>
+        <div class="saved-run-controls">
+          <div>
+            <label for="lab-run-id">
+              Saved run ID
+            </label>
+            <input id="lab-run-id" autocomplete="off" placeholder="Paste a run ID" />
+        </div>
+        <button id="lab-reopen" class="button-secondary" type="button">
+          Open saved result
+        </button>
+      </div>
+    </details>
+    <section id="lab-result" aria-label="Analysis results" hidden>
+    </section>
+  </section>
+<section id="view-critique" class="workspace-section quick-check" role="tabpanel" aria-labelledby="tab-critique" hidden>
+  <div>
+    <h2 id="quick-title">
+      Quick critique
+    </h2>
+    <p>
+      Find the weakest claim without research.
+    </p>
+  </div>
+  <div>
+    <label class="sr-only" for="standalone-arg">
+      Argument for a quick critique
+    </label>
+    <textarea id="standalone-arg" rows="4" maxlength="4000" placeholder="Paste a claim, paragraph, or argument…"></textarea>
+    <button id="btn-standalone-findhole" class="button-secondary" type="button">
+      Find the hole ↗
+    </button>
+    <section id="standalone-hole-panel" class="hidden panel" aria-live="polite">
+    </section>
+  </div>
+</section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/static/workspace-ui.js?v=20261115f" defer></script>
+  <script src="/static/message-format.js?v=20261115f" defer></script>
+  <script src="/static/debate-ui.js?v=20261115f" defer></script>
+  <script src="/static/evidence-lab.js?v=20261115f" defer></script>
+  <script src="/static/auth-ui.js?v=20261115f" defer></script>
 </body>
 </html>

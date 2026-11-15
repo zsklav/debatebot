@@ -30,7 +30,7 @@ client = Groq(api_key=api_key)
 my_claim = "Remote work is more productive than working in an office."
 
 response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-20b",
     messages=[
         {
             "role": "system",

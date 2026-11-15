@@ -1,0 +1,2 @@
+# Optional PostgreSQL application storage (separate from Qdrant vectors).
+psycopg[binary]==3.3.9

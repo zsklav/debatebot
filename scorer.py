@@ -24,7 +24,7 @@ from typing import Optional
 from groq import Groq
 from pydantic import BaseModel, Field, ValidationError
 
-SCORER_MODEL = "llama-3.3-70b-versatile"
+from model_config import get_model
 
 
 class AxisScore(BaseModel):
@@ -80,6 +80,8 @@ def score_argument(
     client: Groq,
     transcript: str,
     max_retries: int = 1,
+    *,
+    model: str | None = None,
 ) -> ArgumentScore:
     """Send a debate transcript to the scorer LLM. Parse and validate JSON.
 
@@ -88,6 +90,7 @@ def score_argument(
         transcript: human-readable debate transcript (use Debate.transcript()).
         max_retries: how many times to retry if the LLM returns invalid JSON
             or wrong shape. Default 1 retry (2 attempts total).
+        model: optional explicit Groq model ID; otherwise resolved from settings.
 
     Returns:
         A validated ArgumentScore.
@@ -96,11 +99,12 @@ def score_argument(
         RuntimeError: if the scorer fails to produce valid output after all
             retries. In production you'd log this and fall back gracefully.
     """
+    selected_model = get_model("scorer", model)
     last_error: Optional[Exception] = None
 
     for attempt in range(max_retries + 1):
         response = client.chat.completions.create(
-            model=SCORER_MODEL,
+            model=selected_model,
             messages=[
                 {"role": "system", "content": SCORER_SYSTEM_PROMPT},
                 {

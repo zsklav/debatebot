@@ -13,13 +13,12 @@ adversarial analysis instead of grading. The same 4-layer defense applies:
 strict prompt schema + JSON mode + Pydantic validation + retry.
 """
 
-import json
 from typing import Optional
 
 from groq import Groq
 from pydantic import BaseModel, Field, ValidationError
 
-FINDHOLE_MODEL = "llama-3.3-70b-versatile"
+from model_config import get_model
 
 
 class ArgumentWeakness(BaseModel):
@@ -58,7 +57,7 @@ The user will paste an argument — it could be one claim, a multi-turn debate t
 
 CRUCIAL RULES:
 - ONE weakness only. Picking "the top three" is forbidden — that defeats the entire point.
-- Your weakest_claim MUST be a verbatim quote (or near-verbatim — same meaning, same exact wording) from the user's input. If it isn't in the argument, the analysis fails.
+- Your weakest_claim MUST be a nonempty, exact verbatim quote from the user's input. Do not paraphrase or change punctuation. If it isn't in the argument, the analysis fails.
 - Surgical, not scattershot. Generic feedback like "you should add more evidence" or "consider counter-arguments" is FORBIDDEN. Your attack must be specific to the words the user wrote.
 - The user wrote "YOU:" lines if this is a debate transcript. The bot's lines (in caps) are CONTEXT, not the user's argument — never quote them as the weakest claim.
 
@@ -82,6 +81,8 @@ def find_hole(
     client: Groq,
     argument: str,
     max_retries: int = 1,
+    *,
+    model: str | None = None,
 ) -> ArgumentWeakness:
     """Analyze an argument and return its single most load-bearing weakness.
 
@@ -89,7 +90,8 @@ def find_hole(
         client: Groq client.
         argument: the user's argument text. Can be a single claim, a debate
             transcript (with YOU:/BOT: lines), or a multi-paragraph essay.
-        max_retries: retries on JSON/validation failure. Default 1.
+        max_retries: retries on JSON/schema/quote validation failure. Default 1.
+        model: optional explicit Groq model ID; otherwise resolved from settings.
 
     Returns:
         Validated ArgumentWeakness.
@@ -97,11 +99,16 @@ def find_hole(
     Raises:
         RuntimeError on persistent validation failure.
     """
+    if not argument.strip():
+        raise ValueError("Argument must not be blank")
+    if max_retries < 0:
+        raise ValueError("max_retries must be nonnegative")
+    selected_model = get_model("findhole", model)
     last_error: Optional[Exception] = None
 
     for attempt in range(max_retries + 1):
         response = client.chat.completions.create(
-            model=FINDHOLE_MODEL,
+            model=selected_model,
             messages=[
                 {"role": "system", "content": FINDHOLE_SYSTEM_PROMPT},
                 {
@@ -118,9 +125,12 @@ def find_hole(
         raw = response.choices[0].message.content
 
         try:
-            data = json.loads(raw)
-            return ArgumentWeakness(**data)
-        except (json.JSONDecodeError, ValidationError) as e:
+            # Validate both the JSON schema and the quote's relationship to input.
+            weakness = ArgumentWeakness.model_validate_json(raw)
+            if not weakness.weakest_claim.strip() or weakness.weakest_claim not in argument:
+                raise ValueError("weakest_claim must be an exact nonempty quote from the argument")
+            return weakness
+        except (ValidationError, ValueError) as e:
             last_error = e
             continue
 

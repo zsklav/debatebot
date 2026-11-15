@@ -15,9 +15,8 @@ Usage:
 
 import json
 import os
-import sys
 import time
-from typing import Literal, Optional
+from typing import Literal
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -25,16 +24,7 @@ from pydantic import BaseModel, ValidationError
 
 from benchmark import BENCHMARK
 from find_hole import find_hole, ArgumentWeakness
-
-load_dotenv()
-
-api_key = os.environ.get("GROQ_API_KEY")
-if not api_key:
-    print("ERROR: GROQ_API_KEY not found.")
-    sys.exit(1)
-
-client = Groq(api_key=api_key)
-JUDGE_MODEL = "llama-3.3-70b-versatile"
+from model_config import get_model
 
 
 class JudgeVerdict(BaseModel):
@@ -63,8 +53,12 @@ VERDICT KEY:
 Be strict. Do not give HIT for a vaguely-related answer. Reserve PARTIAL for cases where the tool clearly engaged with the right area but didn't nail it."""
 
 
-def judge(argument: str, expected: str, actual: ArgumentWeakness) -> JudgeVerdict:
+def judge(
+    argument: str, expected: str, actual: ArgumentWeakness,
+    *, client: Groq, model: str | None = None,
+) -> JudgeVerdict:
     """Use an LLM to compare expected vs actual weakness."""
+    selected_model = get_model("judge", model)
     user_msg = (
         f"ARGUMENT:\n{argument}\n\n"
         f"EXPECTED WEAKNESS:\n{expected}\n\n"
@@ -75,7 +69,7 @@ def judge(argument: str, expected: str, actual: ArgumentWeakness) -> JudgeVerdic
     )
     for attempt in range(2):
         response = client.chat.completions.create(
-            model=JUDGE_MODEL,
+            model=selected_model,
             messages=[
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                 {"role": "user", "content": user_msg},
@@ -92,10 +86,17 @@ def judge(argument: str, expected: str, actual: ArgumentWeakness) -> JudgeVerdic
 
 
 def run_eval() -> None:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise SystemExit("ERROR: GROQ_API_KEY not found.")
+    client = Groq(api_key=api_key)
     results: list[dict] = []
     print()
     print("=" * 78)
     print(f"  Running find_hole eval on {len(BENCHMARK)} cases")
+    print(f"  Analyzer model: {get_model('findhole')}")
+    print(f"  Judge model:    {get_model('judge')}")
     print("=" * 78)
     print()
 
@@ -109,7 +110,7 @@ def run_eval() -> None:
         print(f"[{case_id:>2}/10] {category:<25s} ", end="", flush=True)
         try:
             actual = find_hole(client, argument)
-            verdict = judge(argument, expected, actual)
+            verdict = judge(argument, expected, actual, client=client)
         except Exception as e:
             print(f"ERROR: {e}")
             results.append(

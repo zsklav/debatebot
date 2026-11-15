@@ -1,0 +1,84 @@
+name: DebateBot checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Python ${{ matrix.python }} and PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: debatebot_test
+          POSTGRES_PASSWORD: isolated_ci_password
+          POSTGRES_DB: debatebot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U debatebot_test -d debatebot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RUN_POSTGRES_TESTS: '1'
+      RUN_LOCAL_EMBEDDING_SMOKE: '0'
+      DEBATEBOT_TEST_DATABASE_URL: postgresql://debatebot_test:isolated_ci_password@127.0.0.1:5432/debatebot_test
+      HF_HUB_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-storage.txt
+            requirements-retrieval.txt
+            requirements-web.txt
+      - name: Install application and optional test dependencies
+        run: python -m pip install -r requirements.txt -r requirements-storage.txt -r requirements-retrieval.txt -r requirements-web.txt
+      - name: Verify dependency compatibility
+        run: python -m pip check
+      - name: Test application, ownership, graph and PostgreSQL contracts
+        run: python -m unittest discover -s tests -v
+      - name: Check patch whitespace
+        run: git diff --check
+
+  frontend:
+    name: Frontend contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check web/static/auth-ui.js
+          node --check web/static/evidence-lab.js
+          node --check web/static/debate-ui.js
+          node --check web/static/message-format.js
+          node --check web/static/workspace-ui.js
+      - name: Test rendering, authentication and request contracts
+        run: node --test tests/test_ui.cjs

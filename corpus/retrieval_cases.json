@@ -1,0 +1,13 @@
+{
+  "split": "development",
+  "cases": [
+    {"id": "retention", "query": "Did allowing some home working reduce employee resignations?", "source_id": "bloom-han-liang-2024-hybrid", "passage": "Quitting decreased by one-third"},
+    {"id": "trial-design", "query": "Which study randomized Chinese technology employees to a hybrid schedule?", "source_id": "bloom-han-liang-2024-hybrid", "passage": "six-month randomized trial"},
+    {"id": "performance", "query": "Did hybrid employees receive worse performance reviews or fewer promotions?", "source_id": "bloom-han-liang-2024-hybrid", "passage": "no performance-grade damage"},
+    {"id": "idea-quality", "query": "What happened to the quality of ideas while employees worked from home?", "source_id": "gibbs-mengel-siemroth-2024-innovation", "passage": "idea quality declined"},
+    {"id": "coordination", "query": "Why might unsynchronized office attendance hurt innovation?", "source_id": "gibbs-mengel-siemroth-2024-innovation", "passage": "poorly coordinated office attendance"},
+    {"id": "innovation-design", "query": "What did the Indian IT company event study measure?", "source_id": "gibbs-mengel-siemroth-2024-innovation", "passage": "over 48,000 employees"},
+    {"id": "missing-health", "query": "Does remote work lower blood pressure?", "source_id": null, "passage": null},
+    {"id": "missing-schools", "query": "How does hybrid school attendance affect examination results?", "source_id": null, "passage": null}
+  ]
+}

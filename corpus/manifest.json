@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "path": "hybrid_retention.md",
+      "source_id": "bloom-han-liang-2024-hybrid",
+      "title": "Hybrid working from home improves retention without damaging performance",
+      "source_url": "https://www.nature.com/articles/s41586-024-07500-2",
+      "source_date": "2024-06-12",
+      "authors": "Nicholas Bloom; Ruobing Han; James Liang",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "representation": "DebateBot editorial summary adapted from the abstract; not a verbatim paper excerpt",
+      "verified_on": "2026-11-14"
+    },
+    {
+      "path": "innovation_coordination.md",
+      "source_id": "gibbs-mengel-siemroth-2024-innovation",
+      "title": "Employee innovation during office work, work from home and hybrid work",
+      "source_url": "https://www.nature.com/articles/s41598-024-67122-6",
+      "source_date": "2024-07-24",
+      "authors": "Michael Gibbs; Friederike Mengel; Christoph Siemroth",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "representation": "DebateBot editorial summary adapted from the abstract; not a verbatim paper excerpt",
+      "verified_on": "2026-11-14"
+    }
+  ]
+}
