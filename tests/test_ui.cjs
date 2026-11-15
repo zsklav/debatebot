@@ -14,7 +14,7 @@ class Element {
   replaceChildren() { this.children = []; this.value = ''; }
 }
 global.document = {createElement: tag => new Element(tag), getElementById: () => null};
-const {safeUrl, renderResult} = require('../web/static/evidence-lab.js');
+const {safeUrl, renderResult} = require('../frontend/evidence-lab.js');
 
 test('source URLs allow only credential-free HTTP(S)', () => {
   for (const url of ['javascript:alert(1)', 'data:text/html,test', 'file:///tmp/test',
@@ -76,7 +76,7 @@ test('completed runs remember their ID and reopening uses GET without generation
     return {ok:true,json:async () => options ? result : {id:'saved-id',kind:'research',input_text:'Saved claim',result}};
   };
   try {
-    const {init} = require('../web/static/evidence-lab.js');
+    const {init} = require('../frontend/evidence-lab.js');
     init(); nodes['lab-mode'].value='research'; nodes['lab-input'].value='Original claim';
     await nodes['lab-form'].handlers.submit({preventDefault(){}});
     assert.equal(saved.get('debatebot.run'),'saved-id');
@@ -100,7 +100,7 @@ test('web mode sends an explicit web source and shows provider errors clearly', 
   let request;
   global.fetch=async (url,options)=>{request={url,options};return {ok:false,status:503,json:async()=>({code:'web_unavailable'})};};
   try {
-    require('../web/static/evidence-lab.js').init();
+    require('../frontend/evidence-lab.js').init();
     nodes['lab-mode'].value='web_research';nodes['lab-input'].value='A public research claim';
     await nodes['lab-form'].handlers.submit({preventDefault(){}});
     assert.equal(request.url,'/api/research');
@@ -120,7 +120,7 @@ test('sign-out invalidates late private results from the old account', async () 
   let resolveRequest;
   global.fetch=()=>new Promise(resolve=>{resolveRequest=resolve;});
   try {
-    require('../web/static/evidence-lab.js').init();
+    require('../frontend/evidence-lab.js').init();
     nodes['lab-input'].value='Private old claim';nodes['lab-mode'].value='research';
     const request=nodes['lab-form'].handlers.submit({preventDefault(){}});
     events['debatebot:authchanged']({detail:{reset:true}});
@@ -144,7 +144,7 @@ test('login UI clears passwords and gates the private workspace', async () => {
   let authenticated=false;
   global.fetch=async url=>({ok:true,json:async()=>({authenticated,required:true,user:authenticated?{username:'alice'}:null})});
   try {
-    require('../web/static/auth-ui.js');
+    require('../frontend/auth-ui.js');
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(nodes['app-workspace'].hidden,true);
     nodes['auth-username'].value='alice';nodes['auth-password'].value='private-password-42';
@@ -183,7 +183,7 @@ test('debate blocks duplicate turns and preserves an unsent argument after failu
       if(path==='/api/debate')return {ok:true,json:async()=>({session_id:'test',persona_name:'Professor'})};
       turnCalls++; return new Promise((resolve,reject)=>{rejectTurn=reject;});
     }};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../web/static/debate-ui.js'),'utf8'),context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../frontend/debate-ui.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   await byId('persona-buttons').children[0].onclick();
   byId('turn-input').value='My argument';
@@ -220,7 +220,7 @@ test('workspace tabs support keyboard navigation without clearing draft input', 
   const nodes=new Map();
   const get=id=>{if(!nodes.has(id))nodes.set(id,{handlers:{},value:'draft',attributes:{},
     addEventListener(name,fn){this.handlers[name]=fn;},setAttribute(name,value){this.attributes[name]=value;},focus(){this.focused=true;},scrollIntoView(){}}); return nodes.get(id);};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../web/static/workspace-ui.js'),'utf8'),
+  vm.runInNewContext(fs.readFileSync(require.resolve('../frontend/workspace-ui.js'),'utf8'),
     {document:{getElementById:get},window:{addEventListener(){}}});
   get('tab-evidence').handlers.click();
   assert.equal(get('view-debate').hidden,true);
@@ -250,7 +250,7 @@ test('local preflight abstention shows zero model calls and screened candidates'
 });
 
 test('chat formats headings, emphasis and lists without interpreting model HTML', () => {
-  const {render}=require('../web/static/message-format.js');
+  const {render}=require('../frontend/message-format.js');
   const root=new Element('div');
   render(root,'**ACKNOWLEDGE**\nYour **strongest point** matters.\n\n**THE OPPOSING CASE**\n- First reason\n- Second reason with `code`\n\n<img src=x onerror=alert(1)>\n<script>alert(1)</script>');
   const all=node=>[node,...node.children.flatMap(all)];
@@ -264,11 +264,37 @@ test('chat formats headings, emphasis and lists without interpreting model HTML'
 });
 
 test('chat renders ordered lists and unfinished code fences safely', () => {
-  const {render}=require('../web/static/message-format.js');
+  const {render}=require('../frontend/message-format.js');
   const root=new Element('div');
   render(root,'1. First\n2. Second\n\n```html\n<script>example</script>');
   assert.equal(root.children[0].tagName,'ol');
   assert.equal(root.children[0].children.length,2);
   assert.equal(root.children.at(-1).tagName,'pre');
   assert.match(root.textContent,/<script>example<\/script>/);
+});
+
+test('post-interview reports keep model text inert and label synthetic results', () => {
+  const {renderReport}=require('../frontend/post-review.js');
+  const root=new Element('main');
+  renderReport({demo:true,status:'complete',criteria:[{id:'c1',label:'Caching'}],
+    final:{summary:'<script>unsafe</script>',findings:[{criterion_id:'c1',status:'needs_verification',
+      explanation:'<img src=x onerror=alert(1)>',resolution:'unresolved',
+      evidence:[{source_id:'transcript-1',quote:'Exact candidate text'}]}]},
+    reviews:[],sources:[{id:'transcript-1',speaker:'Candidate',kind:'transcript',start_line:2,end_line:2,text:'Exact candidate text'}],
+    audit:{model_requests:0,elapsed_seconds:1},scope:'Human review required.'}, root);
+  assert.match(root.textContent,/outputs are scripted/);
+  assert.match(root.textContent,/<script>unsafe<\/script>/);
+  assert.match(root.textContent,/<img src=x/);
+  assert.match(root.textContent,/Exact candidate text/);
+  const all=n=>[n,...n.children.flatMap(all)];
+  assert.equal(all(root).filter(n=>['img','script'].includes(n.tagName)).length,0);
+});
+
+test('partial post-interview report never presents a consolidated assessment', () => {
+  const {renderReport}=require('../frontend/post-review.js');
+  const root=new Element('main');
+  renderReport({demo:false,status:'partial',criteria:[],final:null,reviews:[],sources:[],
+    audit:{model_requests:2,elapsed_seconds:1},scope:'Human review required.'},root);
+  assert.match(root.textContent,/No consolidated assessment/);
+  assert.doesNotMatch(root.textContent,/Review summary/);
 });

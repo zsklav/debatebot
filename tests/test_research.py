@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import Mock
 
-from research import research_claim
+from app.evidence.research import research_claim
 from groq import APITimeoutError
 from test_baseline import completion
 from test_evidence import output
@@ -32,7 +32,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(result["read_passages"][0]["text"],"Quitting decreased.")
 
     def test_unavailable_provider_stops_without_fake_evidence_verdict(self):
-        from web_retrieval import WebUnavailable
+        from app.evidence.web_retrieval import WebUnavailable
         self.index.search.side_effect = WebUnavailable("provider unavailable")
         self.create.side_effect = [decision(tool("search_evidence", {"query":"retention"}, "1")),decision()]
         result = research_claim(self.client,self.index,"A claim",source_mode="web")

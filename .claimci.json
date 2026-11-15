@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "claims": [
+    {
+      "id": "local-retrieval",
+      "text": "The declared local-retrieval operations complete with zero monitored Python socket/DNS network attempts.",
+      "kind": "data_locality",
+      "paths": [
+        "app/evidence/retrieval.py",
+        "app/evidence/runtime.py",
+        "app/evidence/relevance.py",
+        "app/evidence/ingestion.py",
+        "tools/claimci_collect.py",
+        "tools/claimci_network.py",
+        "requirements/retrieval.txt",
+        "corpus/manifest.json",
+        "corpus/hybrid_retention.md",
+        "corpus/innovation_coordination.md",
+        "app/core/paths.py",
+        "requirements/base.txt"
+      ],
+      "artifact": "claimci-observations/local-retrieval.json",
+      "required_cases": [
+        "cached-query",
+        "missing-evidence"
+      ],
+      "network_scope": "python_socket_events"
+    },
+    {
+      "id": "evidence-citations",
+      "text": "Citations in the declared live direct-assessor response cases quote stored passages exactly.",
+      "kind": "citations",
+      "paths": [
+        "app/evidence/assessment.py",
+        "app/core/model_config.py",
+        "app/evidence/retrieval.py",
+        "app/evidence/runtime.py",
+        "app/evidence/relevance.py",
+        "app/evidence/ingestion.py",
+        "tools/claimci_collect.py",
+        "requirements/retrieval.txt",
+        "requirements/base.txt",
+        "corpus/manifest.json",
+        "corpus/hybrid_retention.md",
+        "corpus/innovation_coordination.md",
+        "app/core/paths.py"
+      ],
+      "artifact": "claimci-observations/citations.json",
+      "required_cases": [
+        "supported-retention"
+      ]
+    }
+  ]
+}

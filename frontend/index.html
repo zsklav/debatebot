@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171614" />
+  <title>DebateBot — Challenge your thinking</title>
+  <link rel="stylesheet" href="/static/evidence-lab.css?v=20261115f" />
+</head>
+<body>
+  <section id="file-open-notice" hidden>
+    <h1>Start your local workspace</h1>
+    <p>Run this from the project folder, then open the local server:</p>
+    <pre>.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
+    <a href="http://127.0.0.1:8000/">Open DebateBot →</a>
+  </section>
+  <script>
+    if (location.protocol === 'file:') {
+      document.getElementById('file-open-notice').hidden = false;
+      document.documentElement.setAttribute('data-file-open', 'true');
+    }
+  </script>
+  <div id="main-content" class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="DebateBot home"><span class="brand-symbol" aria-hidden="true">✳</span>DebateBot</a>
+    </header>
+    <main>
+<section class="account-card" aria-labelledby="auth-title">
+        <div class="account-copy">
+          <h2 id="auth-title">
+            Sign in to DebateBot
+          </h2>
+          <p id="account-description">
+            Sign in to save your debates and research results.
+          </p>
+          <p id="auth-user" hidden>
+          </p>
+        </div>
+        <div class="account-controls">
+          <form id="auth-form">
+            <div class="auth-fields">
+              <div>
+                <label for="auth-username">
+                  Username
+                </label>
+                <input id="auth-username" autocomplete="username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_-]{3,40}" placeholder="Your username" />
+            </div>
+            <div>
+              <label for="auth-password">
+                Password
+                <span class="label-hint">
+                  12–128 characters
+                </span>
+              </label>
+              <input id="auth-password" type="password" autocomplete="current-password" required minlength="12" maxlength="128" placeholder="Your password" />
+          </div>
+        </div>
+        <div class="auth-actions">
+          <button type="submit" value="login">
+            Sign in ↗
+          </button>
+          <button class="button-secondary" type="submit" value="register">
+            Create account
+          </button>
+        </div>
+      </form>
+      <button id="auth-logout" class="button-secondary" type="button" hidden>
+        Sign out
+      </button>
+      <p id="auth-status" class="status-text" role="status" aria-live="polite">
+        Checking sign-in…
+      </p>
+    </div>
+  </section>
+      <div id="app-workspace" class="character-workspace" hidden>
+        <p class="helper"><a href="/review">Open post-interview Review Council ↗</a></p>
+        <div class="workspace-body">
+          <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
+            <button id="tab-debate" role="tab" aria-selected="true" aria-controls="view-debate" type="button">Chat</button>
+            <button id="tab-evidence" role="tab" aria-selected="false" aria-controls="view-evidence" tabindex="-1" type="button">Evidence Lab</button>
+            <button id="tab-critique" role="tab" aria-selected="false" aria-controls="view-critique" tabindex="-1" type="button">Quick critique</button>
+          </div>
+<section id="view-debate" class="workspace-section debate-room" role="tabpanel" aria-labelledby="tab-debate">
+    <section id="persona-picker">
+      <h2 id="debate-title">Choose a perspective.</h2>
+      <p id="debate-status" class="status-text" role="status">
+      </p>
+      <div id="persona-buttons" class="persona-grid">
+      </div>
+    </section>
+    <section id="debate" class="hidden">
+      <div class="debate-toolbar">
+        <h3 id="active-persona">
+        </h3>
+        <div class="button-group">
+          <button id="btn-score" class="button-secondary" type="button">
+            Score argument
+          </button>
+          <button id="btn-findhole" class="button-secondary" type="button">
+            Find the hole
+          </button>
+          <button id="btn-newdebate" class="button-secondary" type="button">
+            New debate
+          </button>
+        </div>
+      </div>
+      <div id="messages" aria-live="polite" aria-label="Debate messages">
+      </div>
+      <div class="chat-composer">
+      <form id="turn-form" class="turn-form">
+        <label class="sr-only" for="turn-input">
+          Your next argument
+        </label>
+        <input id="turn-input" autocomplete="off" maxlength="4000" placeholder="Make a claim, then defend it…" required />
+      <button type="submit">
+        Send ↗
+      </button>
+    </form>
+    <p id="turn-meta" class="helper" role="status"></p>
+      </div>
+  </section>
+  <section id="score-panel" class="hidden panel">
+  </section>
+  <section id="hole-panel" class="hidden panel">
+  </section>
+</section>
+<section id="view-evidence" class="workspace-section evidence-lab" role="tabpanel" aria-labelledby="tab-evidence" hidden>
+      <div class="section-heading">
+        <div>
+          <h2 id="lab-title">
+            Evidence Lab
+          </h2>
+          <p>
+            Test a claim against evidence.
+          </p>
+        </div>
+      </div>
+      <div class="lab-layout">
+        <div class="lab-composer">
+          <form id="lab-form">
+            <label for="lab-mode">
+              Mode
+            </label>
+            <select id="lab-mode">
+              <option value="evidence">
+                Find the hole + evidence (local)
+              </option>
+              <option value="research">
+                Research a claim (local corpus)
+              </option>
+              <option value="web_research">
+                Web research (public sources)
+              </option>
+            </select>
+            <p id="lab-mode-help" class="helper">
+              Identifies one weak claim, then assesses its factual support. Other claims are not checked.
+            </p>
+            <label for="lab-input">
+              Your claim
+            </label>
+            <textarea id="lab-input" rows="5" maxlength="4000" required placeholder="For example: A two-day hybrid schedule reduced quitting in the studied workforce."></textarea>
+            <div class="lab-actions">
+              <span id="lab-count">
+                0 / 4000
+              </span>
+              <button id="lab-submit" type="submit">
+                Analyze with evidence
+              </button>
+            </div>
+          </form>
+          <p id="lab-status" class="status-text" role="status" aria-live="polite">
+          </p>
+        </div>
+        <details class="scope-details">
+          <summary>Sources &amp; privacy · 2 local study summaries</summary>
+          <p><strong>Local research:</strong> Remote/hybrid-work summaries only. Other topics may have no evidence. Citations quote summaries, not the original papers.</p>
+          <p><strong>Web research:</strong> Queries go to external providers and public pages are read. Avoid confidential information. Availability and source quality vary.</p>
+          <p>Analysis uses API quota. Research activity appears after completion.</p>
+        </details>
+      </div>
+      <details class="saved-run">
+        <summary>
+          ↺
+          &nbsp;
+          Reopen a saved run
+        </summary>
+        <div class="saved-run-controls">
+          <div>
+            <label for="lab-run-id">
+              Saved run ID
+            </label>
+            <input id="lab-run-id" autocomplete="off" placeholder="Paste a run ID" />
+        </div>
+        <button id="lab-reopen" class="button-secondary" type="button">
+          Open saved result
+        </button>
+      </div>
+    </details>
+    <section id="lab-result" aria-label="Analysis results" hidden>
+    </section>
+  </section>
+<section id="view-critique" class="workspace-section quick-check" role="tabpanel" aria-labelledby="tab-critique" hidden>
+  <div>
+    <h2 id="quick-title">
+      Quick critique
+    </h2>
+    <p>
+      Find the weakest claim without research.
+    </p>
+  </div>
+  <div>
+    <label class="sr-only" for="standalone-arg">
+      Argument for a quick critique
+    </label>
+    <textarea id="standalone-arg" rows="4" maxlength="4000" placeholder="Paste a claim, paragraph, or argument…"></textarea>
+    <button id="btn-standalone-findhole" class="button-secondary" type="button">
+      Find the hole ↗
+    </button>
+    <section id="standalone-hole-panel" class="hidden panel" aria-live="polite">
+    </section>
+  </div>
+</section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/static/workspace-ui.js?v=20261115f" defer></script>
+  <script src="/static/message-format.js?v=20261115f" defer></script>
+  <script src="/static/debate-ui.js?v=20261115f" defer></script>
+  <script src="/static/evidence-lab.js?v=20261115f" defer></script>
+  <script src="/static/auth-ui.js?v=20261115f" defer></script>
+</body>
+</html>

@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest.mock import Mock
 
-from research import build_research_graph, research_claim
+from app.evidence.research import build_research_graph, research_claim
 from test_baseline import completion
 from test_evidence import output
 from test_research import decision, tool
@@ -50,7 +50,7 @@ class LangGraphTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("RUN_LOCAL_EMBEDDING_SMOKE") == "1",
                          "Opt in to real cached embeddings/Qdrant with RUN_LOCAL_EMBEDDING_SMOKE=1")
     def test_cached_model_qdrant_and_graph_with_scripted_generation(self):
-        from evidence_runtime import open_evidence_index
+        from app.evidence.runtime import open_evidence_index
 
         stage = 0
         def scripted_response(**request):

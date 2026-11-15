@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from ingestion import chunk_document, load_document, main
+from app.evidence.ingestion import chunk_document, load_document, main
 
 
 class IngestionTests(unittest.TestCase):

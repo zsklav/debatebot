@@ -4,9 +4,9 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
-from evidence import assess_claim, analyze_argument
-from relevance import RelevantLocalIndex, screen
-from research import research_claim
+from app.evidence.assessment import assess_claim, analyze_argument
+from app.evidence.relevance import RelevantLocalIndex, screen
+from app.evidence.research import research_claim
 from test_research import decision, tool
 from test_baseline import completion, analysis
 

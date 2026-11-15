@@ -13,8 +13,8 @@ try:
 except ModuleNotFoundError:
     QdrantClient = None
 
-from ingestion import load_document
-from retrieval import CorpusSource, EvidenceIndex, LocalEmbedder, evaluate, load_corpus, main
+from app.evidence.ingestion import load_document
+from app.evidence.retrieval import CorpusSource, EvidenceIndex, LocalEmbedder, evaluate, load_corpus, main
 
 
 class TestEmbedder:
@@ -28,7 +28,7 @@ class TestEmbedder:
         return [self.query(text) for text in texts]
 
 
-@unittest.skipUnless(QdrantClient, "Install requirements-retrieval.txt for Qdrant tests")
+@unittest.skipUnless(QdrantClient, "Install requirements/retrieval.txt for Qdrant tests")
 class RetrievalTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

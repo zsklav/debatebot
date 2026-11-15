@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from evidence import analyze_argument, assess_claim
+from app.evidence.assessment import analyze_argument, assess_claim
 from test_baseline import analysis
 from test_baseline import completion
 

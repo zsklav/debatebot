@@ -1,16 +1,18 @@
 """Account/session contracts and cross-user API isolation; no model calls."""
 
 from contextlib import nullcontext
-import importlib
 import os
-import sys
 import time
 import unittest
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
-from auth import COOKIE, password_hash, token_hash, verify_password
+from app.api import evidence as evidence_routes
+from app.api.application import create_app
+from app.storage import MemoryRepository
+
+from app.auth import COOKIE, password_hash, token_hash, verify_password
 
 PASSWORD = "Testing-password-42"
 
@@ -28,20 +30,16 @@ class PasswordTests(unittest.TestCase):
 class AuthApiTests(unittest.TestCase):
     def setUp(self):
         self.provider = Mock()
-        self.previous = sys.modules.pop("web.api", None)
-        self.env = patch.dict(os.environ, {"GROQ_API_KEY": "offline-test", "DEBATEBOT_AUTH_REQUIRED": "1"}, clear=True)
-        self.env.start(); self.addCleanup(self.env.stop)
-        self.dotenv = patch("dotenv.load_dotenv"); self.dotenv.start(); self.addCleanup(self.dotenv.stop)
-        self.groq = patch("groq.Groq", return_value=self.provider); self.groq.start(); self.addCleanup(self.groq.stop)
-        self.module = importlib.import_module("web.api")
-        self.a = TestClient(self.module.app)
-        self.b = TestClient(self.module.app)
-        self.addCleanup(self.a.close); self.addCleanup(self.b.close)
-
-    def tearDown(self):
-        sys.modules.pop("web.api", None)
-        if self.previous is not None:
-            sys.modules["web.api"] = self.previous
+        self.env = patch.dict(os.environ, {"DEBATEBOT_AUTH_REQUIRED": "1"}, clear=True)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.repository = MemoryRepository()
+        self.routes = evidence_routes
+        app = create_app(repository=self.repository, client=self.provider, load_environment=False)
+        self.a = TestClient(app)
+        self.b = TestClient(app)
+        self.addCleanup(self.a.close)
+        self.addCleanup(self.b.close)
 
     def register(self, client, username):
         response = client.post("/api/auth/register", json={"username": username, "password": PASSWORD})
@@ -63,8 +61,8 @@ class AuthApiTests(unittest.TestCase):
         cookie = registered.headers["set-cookie"].lower()
         self.assertIn("httponly", cookie); self.assertIn("samesite=strict", cookie)
         raw = self.a.cookies.get(COOKIE)
-        self.assertNotIn(raw, self.module.repository.tokens)
-        self.assertIn(token_hash(raw), self.module.repository.tokens)
+        self.assertNotIn(raw, self.repository.tokens)
+        self.assertIn(token_hash(raw), self.repository.tokens)
         self.assertTrue(self.a.get("/api/auth/me").json()["authenticated"])
         self.assertEqual(self.a.post("/api/auth/logout", json={}).status_code, 200)
         self.a.cookies.set(COOKIE, raw)
@@ -76,7 +74,7 @@ class AuthApiTests(unittest.TestCase):
         self.assertEqual(self.b.post("/api/auth/login", json={"username": "alice", "password": "wrong-password-42"}).status_code, 401)
         self.assertEqual(self.a.post("/api/auth/login", json={"username": "ALICE", "password": PASSWORD}).status_code, 200)
         self.assertNotEqual(old, self.a.cookies.get(COOKIE))
-        self.assertNotIn(token_hash(old), self.module.repository.tokens)
+        self.assertNotIn(token_hash(old), self.repository.tokens)
 
     def test_other_user_cannot_read_or_mutate_debate_or_run(self):
         self.register(self.a, "alice"); self.register(self.b, "bob")
@@ -84,8 +82,8 @@ class AuthApiTests(unittest.TestCase):
         self.assertEqual(self.b.get(f"/api/debate/{sid}").status_code, 404)
         for suffix, payload in (("turn", {"message": "Intrusion"}), ("score", {}), ("findhole", {})):
             self.assertEqual(self.b.post(f"/api/debate/{sid}/{suffix}", json=payload).status_code, 404)
-        with patch.object(self.module, "open_evidence_index", return_value=nullcontext(Mock())), patch.object(
-                self.module, "research_claim", return_value={"status": "partial", "assessment": None}):
+        with patch.object(self.routes, "open_evidence_index", return_value=nullcontext(Mock())), patch.object(
+                self.routes, "research_claim", return_value={"status": "partial", "assessment": None}):
             run = self.a.post("/api/research", json={"claim": "Private claim"}).json()["run_id"]
         self.assertEqual(self.a.get(f"/api/runs/{run}").status_code, 200)
         self.assertEqual(self.b.get(f"/api/runs/{run}").status_code, 404)
@@ -94,7 +92,7 @@ class AuthApiTests(unittest.TestCase):
     def test_expired_and_forged_tokens_are_rejected(self):
         self.register(self.a, "alice")
         key = token_hash(self.a.cookies.get(COOKIE))
-        self.module.repository.tokens[key]["expires_at"] = int(time.time()) - 1
+        self.repository.tokens[key]["expires_at"] = int(time.time()) - 1
         self.assertFalse(self.a.get("/api/auth/me").json()["authenticated"])
         self.b.cookies.set(COOKIE, "forged-token")
         self.assertEqual(self.b.get("/api/runs/any").status_code, 401)
@@ -123,8 +121,8 @@ class AuthApiTests(unittest.TestCase):
 
     def test_https_cookie_is_secure_and_private_responses_are_not_cached(self):
         from fastapi import FastAPI
-        from auth import build_auth
-        from storage import MemoryRepository
+        from app.auth import build_auth
+        from app.storage import MemoryRepository
         with patch.dict(os.environ, {"DEBATEBOT_PUBLIC_ORIGIN": "https://testserver"}):
             app = FastAPI()
             app.include_router(build_auth(MemoryRepository())[0])

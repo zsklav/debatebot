@@ -1,0 +1,40 @@
+name: Claim CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install the read-only checker dependency
+        run: python -m pip install 'pydantic>=2,<3'
+      - name: Collect labelled validator probes (no model requests)
+        run: python -m tools.claimci_collect --profile validation
+      - name: Inspect declared claims
+        env:
+          CLAIMCI_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          if [ -f .claimci.json ]; then
+            python -m tools.claimci --repo-url "$CLAIMCI_REPOSITORY_URL"
+          else
+            echo 'No .claimci.json registry configured.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Show the evidence report
+        if: always()
+        run: |
+          if [ -f .data/claimci/report.md ]; then
+            cat .data/claimci/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi

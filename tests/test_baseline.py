@@ -5,8 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from debate import Debate
-from find_hole import find_hole
+from app.debate.engine import Debate
+from app.debate.find_hole import find_hole
 
 
 def completion(content, tokens=12):

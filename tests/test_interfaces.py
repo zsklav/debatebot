@@ -11,6 +11,10 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
+from app.api import debates as debate_routes, evidence as evidence_routes
+from app.api.application import create_app
+from app.storage import MemoryRepository
+
 from test_baseline import analysis, completion
 
 
@@ -21,7 +25,7 @@ class InterfaceTests(unittest.TestCase):
         create = self.provider.chat.completions.create
         create.return_value = completion("Why?")
         client.post(f"/api/debate/{sid}/turn", json={"message":"A claim"})
-        with patch.object(sys.modules["web.api"], "find_hole") as finding:
+        with patch.object(debate_routes, "find_hole") as finding:
             finding.return_value.model_dump.return_value = {"weakest_claim":"A claim"}
             for _ in range(2):
                 self.assertEqual(client.post(f"/api/debate/{sid}/findhole").status_code, 200)
@@ -33,7 +37,7 @@ class InterfaceTests(unittest.TestCase):
 
     def test_web_research_uses_web_backend_without_opening_local_index(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         web = Mock(); web.provider = "test-provider"
         with patch.object(module,"WebEvidence",return_value=web), patch.object(module,"open_evidence_index") as opening, patch.object(
                 module,"research_claim",return_value={"status":"partial","source_mode":"web","assessment":None}) as researching:
@@ -45,7 +49,7 @@ class InterfaceTests(unittest.TestCase):
 
     def test_missing_web_provider_has_distinct_setup_error(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         with patch.object(module,"WebEvidence",side_effect=module.WebUnavailable("missing")):
             response = client.post("/api/research",json={"claim":"A claim","source":"web"})
         self.assertEqual(response.status_code,503)
@@ -53,7 +57,7 @@ class InterfaceTests(unittest.TestCase):
 
     def test_saved_run_can_be_reopened_and_storage_errors_are_not_model_errors(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         index = Mock()
         with patch.object(module, "open_evidence_index", return_value=nullcontext(index)), patch.object(
                 module, "research_claim", return_value={"status": "partial", "assessment": None}):
@@ -64,28 +68,28 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.json()["result"], response.json())
         self.assertEqual(client.get("/api/runs/missing").status_code, 404)
-        from storage import StorageUnavailable
+        from app.storage import StorageUnavailable
         with patch.object(module, "open_evidence_index", return_value=nullcontext(index)), patch.object(
                 module, "research_claim", return_value={"status": "partial"}), patch.object(
-                module.repository, "save_run", side_effect=StorageUnavailable("private DSN")):
+                self.repository, "save_run", side_effect=StorageUnavailable("private DSN")):
             failed = client.post("/api/research", json={"claim": "A claim"})
         self.assertEqual(failed.status_code, 503)
         self.assertNotIn("private DSN", failed.text)
 
     def test_stale_turn_returns_conflict_without_overwriting_storage(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         sid = self.create_session(client)
         self.provider.chat.completions.create.return_value = completion("Why?")
-        from storage import SessionConflict
-        with patch.object(module.repository, "update_session", side_effect=SessionConflict()):
+        from app.storage import SessionConflict
+        with patch.object(self.repository, "update_session", side_effect=SessionConflict()):
             response = client.post(f"/api/debate/{sid}/turn", json={"message": "A claim"})
         self.assertEqual(response.status_code, 409)
         self.assertEqual(client.get(f"/api/debate/{sid}").json()["turn_count"], 0)
 
     def test_research_api_exposes_budget_termination_without_false_verdict(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         index = Mock()
         self.provider.with_options.return_value = self.provider
         from test_research import decision, tool
@@ -100,14 +104,14 @@ class InterfaceTests(unittest.TestCase):
 
     def test_research_api_rejects_invalid_inputs_before_loading_index(self):
         client = self.api()
-        with patch.object(sys.modules["web.api"], "open_evidence_index") as opening:
+        with patch.object(evidence_routes, "open_evidence_index") as opening:
             self.assertEqual(client.post("/api/research", json={"claim": " "}).status_code, 400)
             self.assertEqual(client.post("/api/research", json={"claim": "x" * 4001}).status_code, 422)
             opening.assert_not_called()
 
     def test_evidence_api_combines_real_analysis_and_citation_validation(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         index = Mock()
         index.search.return_value = [{"chunk_id": "c1", "text": "Quitting decreased.",
                                      "source_url": "https://example.org/study"}]
@@ -123,7 +127,7 @@ class InterfaceTests(unittest.TestCase):
 
     def test_evidence_api_rejects_invalid_input_before_opening_index(self):
         client = self.api()
-        with patch.object(sys.modules["web.api"], "open_evidence_index") as opening:
+        with patch.object(evidence_routes, "open_evidence_index") as opening:
             for payload, status in (({"argument": " "}, 400), ({"argument": "x" * 4001}, 422),
                                     ({"argument": "A claim", "limit": 6}, 422)):
                 self.assertEqual(client.post("/api/findhole/evidence", json=payload).status_code, status)
@@ -132,7 +136,7 @@ class InterfaceTests(unittest.TestCase):
 
     def test_evidence_api_missing_index_is_actionable(self):
         client = self.api()
-        module = sys.modules["web.api"]
+        module = evidence_routes
         with patch.object(module, "open_evidence_index", side_effect=module.EvidenceUnavailable("private path")):
             response = client.post("/api/findhole/evidence", json={"argument": "A claim"})
         self.assertEqual(response.status_code, 503)
@@ -144,7 +148,7 @@ class InterfaceTests(unittest.TestCase):
         index = Mock()
         index.search.return_value = [{"chunk_id": "c1", "text": "A passage"}]
         self.provider.chat.completions.create.side_effect = [completion(analysis()), completion("bad json"), completion("bad json")]
-        with patch.object(sys.modules["web.api"], "open_evidence_index", return_value=nullcontext(index)):
+        with patch.object(evidence_routes, "open_evidence_index", return_value=nullcontext(index)):
             response = client.post("/api/findhole/evidence", json={"argument": "Remote work always improves productivity."})
         self.assertEqual(response.status_code, 502)
         self.assertNotIn("verdict", response.json())
@@ -179,8 +183,9 @@ class InterfaceTests(unittest.TestCase):
         return importlib.import_module(name)
 
     def api(self):
-        module = self.load_entrypoint("web.api")
-        client = TestClient(module.app, raise_server_exceptions=False)
+        self.repository = MemoryRepository()
+        app = create_app(repository=self.repository, client=self.provider, load_environment=False)
+        client = TestClient(app, raise_server_exceptions=False)
         self.addCleanup(client.close)
         return client
 
@@ -244,7 +249,7 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(client.get(f"/api/debate/{sid}").json()["turn_count"], 1)
 
     def test_cli_multiturn_and_commands(self):
-        cli = self.load_entrypoint("chat")
+        cli = self.load_entrypoint("tools.chat")
         self.provider.chat.completions.create.return_value = completion("Why?")
         output = io.StringIO()
         with patch("builtins.input", side_effect=["1", "A claim", "/tokens", "/transcript", "/exit"]), redirect_stdout(output):
@@ -254,7 +259,7 @@ class InterfaceTests(unittest.TestCase):
         self.assertIn("Debate ended after 1 turn(s).", output.getvalue())
 
     def test_cli_standalone_and_compare(self):
-        cli = self.load_entrypoint("chat")
+        cli = self.load_entrypoint("tools.chat")
         create = self.provider.chat.completions.create
         create.return_value = completion(analysis())
         output = io.StringIO()

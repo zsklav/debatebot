@@ -1,16 +1,14 @@
 """Shared memory/PostgreSQL persistence contract; SQL integration is opt-in."""
 
 import os
-import importlib
-import sys
 from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 from contextlib import nullcontext
 from uuid import uuid4
 
-from debate import Debate
-from storage import MemoryRepository, PostgresRepository, SessionConflict, StorageUnavailable
+from app.debate.engine import Debate
+from app.storage import MemoryRepository, PostgresRepository, SessionConflict
 from test_baseline import completion
 
 
@@ -112,34 +110,30 @@ class PostgresTests(StorageContract, unittest.TestCase):
 
     def test_new_api_instance_reopens_saved_debate_and_run(self):
         from fastapi.testclient import TestClient
-        previous = sys.modules.pop("web.api", None)
-        try:
-            with patch.dict(os.environ, {"DATABASE_URL": self.dsn, "GROQ_API_KEY": "offline-test-key", "DEBATEBOT_AUTH_REQUIRED": "0"}, clear=True), patch(
-                    "dotenv.load_dotenv"), patch("groq.Groq", return_value=self.client):
-                module = importlib.import_module("web.api")
-                with TestClient(module.app) as api:
-                    created = api.post("/api/debate", json={"persona_key": "socratic"})
-                    self.sid = created.json()["session_id"]
-                    self.assertEqual(api.post(f"/api/debate/{self.sid}/turn", json={"message": "Saved claim"}).status_code, 200)
-                    with patch.object(module, "open_evidence_index", return_value=nullcontext(Mock())), patch.object(
-                            module, "research_claim", return_value={"status": "partial", "assessment": None}):
-                        run = api.post("/api/research", json={"claim": "Saved research claim"})
-                    self.run_id = run.json()["run_id"]
-                # New app/repository/client instance; no session cache is shared.
-                sys.modules.pop("web.api", None)
-                restarted = importlib.import_module("web.api")
-                with TestClient(restarted.app) as api:
-                    restored = api.get(f"/api/debate/{self.sid}")
-                    self.assertEqual(restored.json()["turn_count"], 1)
-                    self.assertIn("Saved claim", restored.json()["transcript"])
-                    self.assertEqual(restored.json()["messages"][0]["role"], "user")
-                    saved = api.get(f"/api/runs/{self.run_id}")
-                    self.assertEqual(saved.json()["result"]["status"], "partial")
-                    self.assertEqual(saved.json()["result"]["storage"], "postgresql")
-        finally:
-            sys.modules.pop("web.api", None)
-            if previous is not None:
-                sys.modules["web.api"] = previous
+        from app.api import evidence as evidence_routes
+        from app.api.application import create_app
+
+        with patch.dict(os.environ, {"DATABASE_URL": self.dsn, "DEBATEBOT_AUTH_REQUIRED": "0"}, clear=True):
+            app = create_app(client=self.client, load_environment=False)
+            with TestClient(app) as api:
+                created = api.post("/api/debate", json={"persona_key": "socratic"})
+                self.sid = created.json()["session_id"]
+                self.assertEqual(api.post(f"/api/debate/{self.sid}/turn", json={"message": "Saved claim"}).status_code, 200)
+                with patch.object(evidence_routes, "open_evidence_index", return_value=nullcontext(Mock())), patch.object(
+                        evidence_routes, "research_claim", return_value={"status": "partial", "assessment": None}):
+                    run = api.post("/api/research", json={"claim": "Saved research claim"})
+                self.run_id = run.json()["run_id"]
+            # New application and repository instance; no session cache is shared.
+            restarted = create_app(client=self.client, load_environment=False)
+            self.assertIsNot(app.state.repository, restarted.state.repository)
+            with TestClient(restarted) as api:
+                restored = api.get(f"/api/debate/{self.sid}")
+                self.assertEqual(restored.json()["turn_count"], 1)
+                self.assertIn("Saved claim", restored.json()["transcript"])
+                self.assertEqual(restored.json()["messages"][0]["role"], "user")
+                saved = api.get(f"/api/runs/{self.run_id}")
+                self.assertEqual(saved.json()["result"]["status"], "partial")
+                self.assertEqual(saved.json()["result"]["storage"], "postgresql")
 
     def make_repository(self):
         from dotenv import dotenv_values

@@ -5,7 +5,7 @@ import socket
 import unittest
 from unittest.mock import Mock, patch
 
-from web_retrieval import PinnedHTTPS, TavilySearch, WebEvidence, WebUnavailable, fetch_public_page, public_target
+from app.evidence.web_retrieval import PinnedHTTPS, TavilySearch, WebEvidence, WebUnavailable, fetch_public_page, public_target
 
 
 def resolver(host, port, **kwargs):

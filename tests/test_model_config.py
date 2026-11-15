@@ -5,11 +5,11 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from debate import Debate
-from eval_findhole import judge
-from find_hole import ArgumentWeakness, find_hole
-from model_config import DEFAULT_MODEL, ROLE_ENV, get_model
-from scorer import score_argument
+from app.debate.engine import Debate
+from tools.eval_findhole import judge
+from app.debate.find_hole import ArgumentWeakness, find_hole
+from app.core.model_config import DEFAULT_MODEL, ROLE_ENV, get_model
+from app.debate.scorer import score_argument
 from test_baseline import analysis, completion
 
 

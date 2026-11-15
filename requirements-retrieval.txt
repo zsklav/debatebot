@@ -1,3 +1,0 @@
-# Optional local retrieval dependencies. Core debate app still uses requirements.txt.
-qdrant-client==1.20.0
-fastembed==0.9.1

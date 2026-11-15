@@ -5,7 +5,7 @@ from threading import Event
 import unittest
 from unittest.mock import Mock
 
-from analysis_cache import AnalysisCache
+from app.core.cache import AnalysisCache
 
 
 class CacheTests(unittest.TestCase):
