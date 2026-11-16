@@ -1,0 +1,16 @@
+WEBVTT
+
+00:00:12.000 --> 00:00:18.000
+<v Interviewer>Describe your caching implementation.</v>
+
+00:00:19.000 --> 00:00:31.000
+<v Candidate>I added Redis caching for product lookups with a 60-second TTL.</v>
+
+00:01:02.000 --> 00:01:09.000
+<v Interviewer>How did you handle invalidation and concurrent writes?</v>
+
+00:01:10.000 --> 00:01:25.000
+<v Candidate>I have not implemented invalidation beyond TTL or tested concurrent updates.</v>
+
+00:02:00.000 --> 00:02:05.000
+<v Interviewer>Which transaction isolation levels did you use?</v>

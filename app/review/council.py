@@ -12,6 +12,7 @@ from .evidence import prepare, retrieve
 from .models import (
     CouncilOutput,
     ReviewerOutput,
+    settle_resolution,
     validate_adjudication,
     validate_findings,
 )
@@ -48,6 +49,23 @@ def evaluate(payload, adapters, *, encoder=None, seed=None, demo=False):
     random.Random(seed).shuffle(order)
     criteria = [c.model_dump() for c in payload.criteria]
 
+    failure_kinds = {}
+    adjusted = []  # Criteria whose resolution label was set by code, not by the judge.
+
+    def failure_kind(error):
+        # Type names and HTTP status only; never message text, which could hold prompts or keys.
+        parts = []
+        while error is not None and len(parts) < 3:
+            response = getattr(error, "response", None)
+            status = getattr(response, "status_code", None)
+            parts.append(f"{type(error).__name__}{f' {status}' if status else ''}")
+            if type(error) is ValueError:
+                # Only our own validators raise a bare ValueError, with fixed messages.
+                # Pydantic, JSON and provider errors can contain model text, so they stay type-only.
+                parts[-1] += f": {str(error)[:120]}"
+            error = error.__cause__
+        return " <- ".join(parts)
+
     def read_output(adapter, schema, messages, sources):
         output = schema.model_validate_json(adapter.invoke(messages))
         validate_findings(output, payload.criteria, {source.id: source for source in sources})
@@ -69,7 +87,8 @@ def evaluate(payload, adapters, *, encoder=None, seed=None, demo=False):
             try:
                 output = read_output(adapters[index], ReviewerOutput, messages, state["selected"])
                 return {"reviewer_id":f"Reviewer {index + 1}", **output.model_dump()}, None
-            except Exception:
+            except Exception as error:
+                failure_kinds[f"reviewer_{index + 1}"] = failure_kind(error)
                 return None, f"reviewer_{index + 1}_request_or_validation_failed"
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(run, (0, 1)))
@@ -84,15 +103,18 @@ def evaluate(payload, adapters, *, encoder=None, seed=None, demo=False):
         messages = [{"role":"system", "content":POLICY +
             "\nReconcile findings against original evidence. Reviewer identities do not convey quality. "
             "Keep material uncertainty unresolved. A proposed resolution still needs human review. "
-            "Use agreed only when both reviewers and your finding share the same status. "
+            "The system sets agreed itself when both reviewers and your finding share a status; "
+            "choose proposed_resolution or unresolved. "
             "Use unresolved with needs_verification or not_assessed when evidence cannot resolve disagreement. "
             "Schema:\n" + json.dumps(CouncilOutput.model_json_schema())},
             {"role":"user", "content":json.dumps(context)}]
         try:
             output = read_output(adapters[2], CouncilOutput, messages, state["selected"])
-            validate_adjudication(output, state["reviews"])
+            adjusted.extend(settle_resolution(output, state["reviews"]))
+            validate_adjudication(output, state["reviews"])  # Safety net after the code-derived label.
             return {"final":output.model_dump(), "history":[*state["history"], "adjudicate", "validate_final"]}
-        except Exception:
+        except Exception as error:
+            failure_kinds["adjudicator"] = failure_kind(error)
             return {"errors":[*state["errors"], "adjudicator_request_or_validation_failed"],
                     "final":None, "history":[*state["history"], "adjudicate", "validate_final"]}
 
@@ -117,6 +139,7 @@ def evaluate(payload, adapters, *, encoder=None, seed=None, demo=False):
                      "order_seed":seed, "models":[a.route.public() for a in adapters],
                      "model_requests":sum(a.requests for a in adapters),
                      "reported_tokens":[a.tokens for a in adapters],
+                     "failure_kinds":failure_kinds, "resolution_adjusted":adjusted,
                      "elapsed_seconds":round(time.monotonic() - started, 2),
                      "rubric_version":"rubric-" + hashlib.sha256(json.dumps(criteria, sort_keys=True).encode()).hexdigest()[:12],
                      "policy_version":hashlib.sha256(POLICY.encode()).hexdigest()[:12]},

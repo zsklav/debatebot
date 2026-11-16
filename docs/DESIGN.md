@@ -1,47 +1,63 @@
-# DebateBot interface design
+# DebateBot interface
 
-## Current layout — focused workspace
+## Visual identity
 
-Removed the duplicate character-profile sidebar, slogans, decorative badges, repeated headings and footer. The app uses one centered 840px workspace, compact account controls, three tool tabs and the active task. Active conversations show the persona and useful actions without the picker heading. Research scope/privacy information and saved-run controls remain available in collapsed disclosures; external-search disclosure remains visible in web-mode help. Token totals are retained by the API but omitted from the main chat status.
+Keep the orange and charcoal palette, with DebateBot's own wordmark and a local
+speech-bubble SVG. The same mark is used in the header, favicon and assistant
+message labels. There are no star marks, copied brand assets, external fonts or
+image-generation dependencies.
 
-## Current theme — orange and charcoal
+- Page: #171614; surfaces: #211f1c; text: #f4eee5.
+- Muted text: #aaa398; borders: #38332d.
+- Accent: #e7a37c; primary action: #dfa177 with a dark label.
+- System sans-serif throughout, including headings and assistant replies.
+- Eight-pixel corners for most fields, buttons and cards; restrained borders.
 
-The current implementation follows the user's requested Claude-inspired direction: warm charcoal #171614, surfaces #211f1c, cream text #f4eee5, muted text #aaa398, orange accent #e7a37c and terracotta actions #dfa177 with dark labels. System UI fonts serve controls; Georgia serves major headings and assistant replies. The abstract orange mark is a local text/CSS asset. These are original implementation choices, not extracted Claude design tokens. The earlier Character.AI research below records the previous layout reference; its palette has been superseded. Chat and Evidence Lab were visually checked with no browser console errors.
+## Layout
 
+The app shell fills the viewport with fluid 20–56px gutters. The previous 960px
+shell and 840px centered workspace limits are removed. Individual paragraphs
+retain a readable line length rather than stretching text across every pixel.
 
-Reference: https://character.ai/character/URqCI5OM/debate-bot-engaging-debates
-Inspected 2026-11-14 using Firecrawl content/branding and a live desktop browser screenshot.
+A shared header provides Debate, Notebook and Review Council navigation, an
+active-page indicator, and compact account controls. There is no duplicate
+navigation inside each workspace.
 
-## Observed reference
+- **Notebook:** a 290px import/history sidebar and a flexible editing column.
+  Saved notebooks and Google Meet controls stay beside the active task. Optional
+  AI notes begin as a disclosure; source-linked notes occupy the main column.
+  Meet connection/activity is collapsed until requested or an active import needs
+  attention. Repeated draft explanations, timestamps and provenance details are
+  inside Sources/Notebook details. The visible header keeps Saved/Unsaved and a
+  sample label. Import title/format controls live in Import options.
+- **Review Council:** interview sources and assessment criteria sit side by
+  side. Source preview, consent and the run action follow the input columns.
+  Report cards use two columns when space permits.
+  Extra competencies, provider identities and scope information use disclosures;
+  explicit model consent and setup errors remain available before a live run.
+- **Debate:** three persona choices share a row on desktop; active chat uses
+  the full canvas with a sticky composer and bounded prose width.
+- **Evidence Lab:** inputs and results sit side by side once results exist.
+  Scope and saved-run controls remain available without a second profile panel.
+- **Quick critique:** explanatory copy sits beside the argument input.
 
-The actual browser screenshot showed a dark charcoal page, a left-hand character profile with a circular avatar and white pill Chat button, and a right-hand content column with underlined tabs. Type is compact sans serif, with muted supporting copy and minimal borders. Firecrawl's branding response identified atHauss, 14px body text, 20px headings and 30px button radii, but returned **light-theme colors** (#F4F4F5 background and #202024 primary). Those light colors were not used as evidence for the observed dark screenshot. Dimensions below are implementation choices, not exact extracted CSS.
+Below 900px, the major columns stack. Below 650px, navigation moves to a second
+header row and account controls remain compact. These breakpoints are implemented;
+this update was visually checked at the browser's normal desktop size rather
+than a verified mobile-device viewport.
 
-## Local implementation choices
+## Interaction and verification
 
-- Background #18181b; surface #202024; elevated surface #27272c.
-- Primary text #f4f4f5; supporting text #a1a1aa; borders #303035.
-- System Segoe UI/sans serif; no remote font dependency or proprietary font copy.
-- 280px profile column with a flexible content column and 60px gap on desktop.
-- Circular CSS illustration with muted lavender colors. No Character.AI logo or avatar asset is reused.
-- White pill actions, underlined tabs, 14–16px rounded cards.
-- Chat is the default tab. Evidence Lab and Quick critique preserve drafts and results when switching.
-- Below 650px the profile becomes a compact stacked header. This responsive treatment is our adaptation; the supplied reference was inspected at desktop size.
+Existing form IDs, ownership checks, source links, consent and request budgets
+are preserved. Model text remains inert; chat formatting uses the local safe
+Markdown renderer. AI note generation stays behind explicit consent.
 
-## Files
+Verified in the browser: shared navigation, restored chat, saved notebook
+selection, the AI-notes disclosure, notebook-to-review handoff and source preview
+without model calls. At a 1265px viewport, the workspace measured 1188px wide
+with no horizontal overflow. All 20 existing frontend contracts pass.
+The copy cleanup also verified unsaved/revert feedback, collapsed original
+sources and sample transcript preview with import options closed.
 
-- frontend/index.html: semantic page structure and existing form contracts.
-- frontend/evidence-lab.css: shared tokens, profile, forms, chat, evidence and breakpoints.
-- frontend/workspace-ui.js: accessible keyboard-operable tabs.
-- frontend/debate-ui.js: isolated debate interactions.
-- frontend/evidence-lab.js: safe evidence rendering and research requests.
-- frontend/auth-ui.js: sign-in and account lifecycle.
-
-The reference is a visual direction. DebateBot retains its own identity and actual features; no interaction counts or usage claims are copied. The reference's exact authenticated chat view, animations and mobile layout were not captured.
-
-## Validation limits
-
-The final desktop UI, persona selection, keyboard navigation and reopening saved research were verified in the live local app with no console errors. The browser viewport override did not apply the requested 390px width (DOM still reported 1280px), so final mobile device QA remains pending. Responsive rules are implemented, not claimed as device-verified.
-
-## Chat response readability
-
-Bot responses use a local safe Markdown subset (message-format.js), readable line length, paragraph spacing and labelled sections. Human messages remain plain-text bubbles. Long saved paragraphs can be split visually into sentence groups; saved text is preserved. The transcript uses page scrolling and a sticky composer instead of nested scrollbars. Formatting performs no model calls and does not establish the factual correctness of generated claims.
+Shared rules live in frontend/evidence-lab.css; notebook and council layouts
+have their own stylesheets. The logo is frontend/debatebot-mark.svg.

@@ -82,17 +82,129 @@ class ReviewTests(unittest.TestCase):
         def judge(messages):
             captured.append(messages)
             data = json.loads(original(messages))
-            data['findings'][0]['resolution'] = 'agreed'
+            data['findings'][0]['resolution'] = 'agreed'  # Reviewers differ on caching.
             return json.dumps(data)
         adapters[2].invoke = judge
         result = evaluate(demo.payload(), adapters, encoder=Encoder())
-        self.assertEqual(result['status'], 'partial')
+        # Code, not the judge, decides agreement: the claim is downgraded and audited.
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(result['final']['findings'][0]['resolution'], 'proposed_resolution')
+        self.assertEqual(result['audit']['resolution_adjusted'],
+                         [{'criterion_id':'caching', 'from':'agreed', 'to':'proposed_resolution'}])
         context = json.loads(captured[0][-1]['content'])
         self.assertNotIn('models', context)
         self.assertNotIn('provider', json.dumps(context))
 
 
+class ResolutionAndQuoteTests(unittest.TestCase):
+    def reviews(self, first, second):
+        return [{'findings':[{'criterion_id':'caching', 'status':status}]} for status in (first, second)]
+
+    def output(self, status, resolution):
+        from app.review.models import CouncilOutput
+        return CouncilOutput.model_validate({'summary':'A summary of at least twenty characters.', 'findings':[{
+            'criterion_id':'caching', 'status':status, 'resolution':resolution, 'evidence':[],
+            'explanation':'No evidence is available in the supplied excerpts.'}]})
+
+    def test_unanimous_status_becomes_agreed_even_if_judge_hedged(self):
+        from app.review.models import settle_resolution
+        result = self.output('not_assessed', 'unresolved')
+        self.assertEqual(settle_resolution(result, self.reviews('not_assessed', 'not_assessed')),
+                         [{'criterion_id':'caching', 'from':'unresolved', 'to':'agreed'}])
+        self.assertEqual(result.findings[0].resolution, 'agreed')
+
+    def test_disagreement_never_stays_agreed_and_judge_choice_is_kept(self):
+        from app.review.models import settle_resolution
+        result = self.output('needs_verification', 'agreed')
+        settle_resolution(result, self.reviews('not_assessed', 'needs_verification'))
+        self.assertEqual(result.findings[0].resolution, 'proposed_resolution')
+        result = self.output('needs_verification', 'unresolved')
+        self.assertEqual(settle_resolution(result, self.reviews('not_assessed', 'needs_verification')), [])
+        self.assertEqual(result.findings[0].resolution, 'unresolved')
+
+    def test_quote_failures_have_distinct_fixed_messages(self):
+        from app.review.models import Criterion, ReviewerOutput, Source, validate_findings
+        criteria = [Criterion(id='caching', label='Caching', description='Explain implemented caching.')]
+        sources = {
+            'resume-1': Source(id='resume-1', kind='resume', speaker='Candidate', start_line=1, end_line=1, text='Built Redis cache'),
+            'q-1': Source(id='q-1', kind='transcript', speaker='Interviewer', start_line=1, end_line=1, text='Describe caching'),
+            'a-1': Source(id='a-1', kind='transcript', speaker='Candidate', start_line=2, end_line=2, text='I set a TTL'),
+        }
+        def run(source_id, quote):
+            output = ReviewerOutput.model_validate({'findings':[{'criterion_id':'caching', 'status':'demonstrated',
+                'explanation':'A concrete example exists.', 'evidence':[{'source_id':source_id, 'quote':quote}]}]})
+            validate_findings(output, criteria, sources)
+        for source_id, quote, reason in [('missing', 'x', 'unknown source ID'), ('resume-1', 'Built Redis cache', 'cited the resume'),
+                                         ('q-1', 'Describe caching', 'non-Candidate'), ('a-1', 'I set a ttl', 'not verbatim')]:
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                run(source_id, quote)
+        run('a-1', 'I set a TTL')
+
+
 class ProviderTests(unittest.TestCase):
+    def free_environment(self):
+        env = {'OPENROUTER_API_KEY':'test-only-key', 'POST_REVIEW_FREE_ONLY':'1'}
+        for role, model, family in [('A','google/gemma-4-31b-it:free','gemma'),
+                                    ('B','inclusionai/ling-3.2-flash:free','ling'),
+                                    ('JUDGE','nvidia/nemotron-3.5-super-vl:free','nemotron')]:
+            env.update({f'POST_REVIEW_{role}_PROVIDER':'openrouter', f'POST_REVIEW_{role}_MODEL':model,
+                        f'POST_REVIEW_{role}_FAMILY':family})
+        return env
+
+    def test_explicit_free_families_are_valid_but_paid_routes_and_routers_are_blocked(self):
+        env = self.free_environment()
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(len(configuration()), 3)
+        for model in ('google/gemma-4-31b-it', 'openrouter/auto', 'openrouter/free', 'auto'):
+            with self.subTest(model=model), patch.dict(os.environ, {**env, 'POST_REVIEW_A_MODEL':model}, clear=True):
+                with self.assertRaises(ReviewConfigurationError):
+                    configuration()
+        with patch.dict(os.environ, {**env, 'POST_REVIEW_FREE_ONLY':'typo'}, clear=True), self.assertRaises(ReviewConfigurationError):
+            configuration()
+
+    def test_free_requests_have_zero_price_caps_no_model_fallback_and_bounded_reasoning(self):
+        seen = []
+        def respond(request):
+            seen.append(json.loads(request.content))
+            return httpx.Response(200,json={'choices':[{'finish_reason':'stop','message':{'content':'{}'}}]})
+        with patch.dict(os.environ,self.free_environment(),clear=True):
+            for route in configuration():
+                adapter = ModelAdapter(route,httpx.MockTransport(respond))
+                self.assertEqual(adapter.invoke([{'role':'user','content':'Return JSON.'}]), '{}')
+                with self.assertRaises(ReviewProviderError):
+                    adapter.invoke([])
+        self.assertEqual(len(seen), 3)
+        for body in seen:
+            self.assertTrue(body['model'].endswith(':free'))
+            self.assertNotIn('models', body)
+            self.assertEqual(body['provider']['max_price'], {'prompt':0,'completion':0,'request':0,'image':0})
+            self.assertFalse(body['provider']['allow_fallbacks'])
+            self.assertTrue(body['provider']['require_parameters'])
+            self.assertEqual(body['reasoning'], {'enabled':False})
+            self.assertEqual(body['max_tokens'], 1800)
+
+    def test_direct_paid_adapter_cannot_bypass_free_only_policy(self):
+        transport = Mock()
+        route = ModelRoute('judge','openrouter','paid/model','family','test-only-key')
+        adapter = ModelAdapter(route,transport)
+        with patch.dict(os.environ,{'POST_REVIEW_FREE_ONLY':'1'},clear=True), self.assertRaises(ReviewConfigurationError):
+            adapter.invoke([])
+        self.assertEqual(adapter.requests, 0)
+        transport.handle_request.assert_not_called()
+
+    def test_free_rate_limit_is_one_failed_request_without_fallback(self):
+        seen = []
+        def respond(request):
+            seen.append(json.loads(request.content))
+            return httpx.Response(429,json={'error':{'message':'Rate limited'}})
+        with patch.dict(os.environ,self.free_environment(),clear=True):
+            adapter=ModelAdapter(configuration()[0],httpx.MockTransport(respond))
+            with self.assertRaises(ReviewProviderError):
+                adapter.invoke([])
+            with self.assertRaises(ReviewProviderError):
+                adapter.invoke([])
+        self.assertEqual(len(seen),1)
+
     def test_adapter_budget_and_transport_contract(self):
         seen = []
         def respond(request):

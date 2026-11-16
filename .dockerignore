@@ -1,7 +1,7 @@
 .venv
 .git
 .env
-__pycache__
+**/__pycache__
 *.pyc
 .pytest_cache
 .DS_Store
@@ -9,3 +9,5 @@ __pycache__
 claimci-observations
 .env.*
 !.env.example
+client_secret*.json
+google-oauth*.json

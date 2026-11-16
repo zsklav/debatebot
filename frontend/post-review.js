@@ -12,7 +12,7 @@
     for (const source of sources) {
       const row = element('section', null, 'review-source');
       row.id = prefix + source.id;
-      row.append(element('h4', `${source.speaker} · ${source.kind} lines ${source.start_line}–${source.end_line}`),
+      row.append(element('h4', `${source.speaker} · ${source.kind} lines ${source.start_line}–${source.end_line}${source.start_time ? ' · ' + source.start_time : ''}`),
         element('p', source.text));
       details.append(row);
     }
@@ -20,8 +20,12 @@
   }
   function renderReport(report, root) {
     root.replaceChildren();
-    if (report.demo) root.append(element('p', 'Synthetic sample: reviewer and judge outputs are scripted. No live models were evaluated and no API calls were made.', 'review-banner'));
-    if (report.status !== 'complete') root.append(element('p', 'Partial review: a model request or evidence validation failed. No consolidated assessment is available.', 'review-banner'));
+    if (typeof report.notebook_id === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(report.notebook_id)) {
+      const link = element('a', 'Open the source interview notebook', 'helper');
+      link.href = '/notebook?id=' + encodeURIComponent(report.notebook_id); root.append(link);
+    }
+    if (report.demo) root.append(element('p', 'Sample report: outputs are scripted. No model calls.', 'review-banner'));
+    if (report.status !== 'complete') root.append(element('p', 'Partial review. No consolidated assessment is available.', 'review-banner'));
     const labels = Object.fromEntries(report.criteria.map(c => [c.id, c.label]));
     function findings(items, parent) {
       for (const finding of items) {
@@ -54,14 +58,14 @@
     const audit = element('details', null, 'lab-card');
     audit.append(element('summary', 'Run details'), element('p', `Report: ${report.run_id || 'unsaved'} · ${report.storage || 'unknown storage'}`),
       element('p', `Model requests: ${report.audit.model_requests} · ${report.audit.elapsed_seconds}s`),
-      element('pre', JSON.stringify(report.audit, null, 2)));
-    root.append(audit, element('p', report.scope, 'review-scope'));
+      element('pre', JSON.stringify(report.audit, null, 2)), element('p', report.scope, 'review-scope'));
+    root.append(audit);
   }
   function init() {
     const byId = id => document.getElementById(id);
     const form = byId('review-form');
     if (!form) return;
-    let busy = false, epoch = 0, configured = false, prepared = '';
+    let busy = false, epoch = 0, configured = false, prepared = '', notebookId = null;
     const status = byId('review-status'), result = byId('review-result'), preview = byId('review-preview');
     function payload() {
       const criteria = [];
@@ -70,7 +74,7 @@
         if (label || description) criteria.push({id:`criterion_${n}`, label, description});
       }
       return {transcript:byId('review-transcript').value, job_description:byId('review-job').value,
-        resume:byId('review-resume').value, criteria};
+        resume:byId('review-resume').value, criteria, ...(notebookId ? {notebook_id:notebookId} : {})};
     }
     function ready() { byId('review-run').disabled = busy || !configured || !byId('review-consent').checked || prepared !== JSON.stringify(payload()); }
     function controls(disabled) {
@@ -84,14 +88,16 @@
       const response = await fetch(path, body === undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(typeof data.detail === 'string' ? data.detail : response.status === 401 ? 'Sign in to continue.' : 'Request failed. Check input limits and server setup.');
+        const first = Array.isArray(data.detail) ? data.detail[0] : null;
+        const field = first && Array.isArray(first.loc) ? first.loc.filter(part => part !== 'body').join(' > ') : '';
+        throw new Error(typeof data.detail === 'string' ? data.detail : field ? `Check "${field}": ${first.msg}` : response.status === 401 ? 'Sign in to continue.' : 'Request failed. Check input limits and server setup.');
       }
       return response.json();
     }
     function show(report) {
       renderReport(report, result); result.hidden = false;
       byId('review-run-id').value = report.run_id || '';
-      status.textContent = report.demo ? 'Synthetic sample complete. No external model call was made.' : report.status === 'complete' ? 'Review ready for human inspection.' : 'Partial review saved. Inspect the available evidence.';
+      status.textContent = report.demo ? '' : report.status === 'complete' ? 'Review ready.' : 'Partial review saved.';
       status.dataset.state = 'done';
       result.scrollIntoView({block:'start', behavior:'auto'});
     }
@@ -102,22 +108,26 @@
       catch (error) { if (current === epoch) { status.dataset.state = 'error'; status.textContent = error instanceof TypeError ? 'Could not reach the server. Your input is preserved.' : error.message; } }
       finally { if (current === epoch) controls(false); }
     }
-    form.addEventListener('input', event => { if (event.target.id === 'review-consent') ready(); else invalidate(); });
+    function unlinkNotebook() { notebookId = null; byId('review-origin').hidden = true; byId('review-origin').replaceChildren(); }
+    form.addEventListener('input', event => {
+      if (event.target.id === 'review-consent') ready();
+      else { if (event.target.id === 'review-transcript') unlinkNotebook(); invalidate(); }
+    });
     byId('review-file').addEventListener('change', () => task(async current => {
       const file = byId('review-file').files[0];
       if (!file) return;
-      if (file.size > 56000 || !/\.(txt|md)$/i.test(file.name)) throw new Error('Use a .txt or .md transcript under 56 KB.');
+      if (file.size > 240000 || !/\.(txt|md)$/i.test(file.name)) throw new Error('Use a .txt or .md transcript under 240 KB, or import VTT/JSON in Interview Notebook.');
       const text = await file.text();
       if (current !== epoch) return;
-      if (text.length > 14000) throw new Error('Keep the transcript within 14,000 characters.');
-      byId('review-transcript').value = text; invalidate(); status.textContent = 'Transcript imported. Check speaker labels and preview the sources.';
+      if (text.length > 60000) throw new Error('Keep the transcript within 60,000 characters.');
+      byId('review-transcript').value = text; unlinkNotebook(); invalidate(); status.textContent = 'Transcript imported. Check speaker labels and preview the sources.';
     }));
     byId('review-prepare').addEventListener('click', () => task(async current => {
       if (!form.reportValidity()) return;
       const input = payload(), data = await request('/api/reviews/prepare', input);
       if (current !== epoch) return;
       preview.replaceChildren(sourcesView(data.sources, 'preview-source-')); preview.hidden = false;
-      prepared = JSON.stringify(input); status.textContent = 'Source preview ready. Review it before authorizing external processing.';
+      prepared = JSON.stringify(input); status.textContent = 'Sources ready. Review them before continuing.';
     }));
     form.addEventListener('submit', event => {
       event.preventDefault();
@@ -145,16 +155,30 @@
         epoch++; busy = false; form.reset(); prepared = ''; configured = false;
         preview.replaceChildren(); result.replaceChildren(); preview.hidden = result.hidden = true;
         byId('review-run-id').value = ''; status.textContent = ''; controls(false);
+        byId('review-models').textContent = '';
+        unlinkNotebook();
       }
       if (event.detail.authenticated) {
         const current = epoch;
         request('/api/reviews/configuration').then(data => {
           if (current !== epoch) return;
           configured = data.configured;
-          byId('review-configuration').textContent = configured ? 'External routes: ' + data.models.map(m => `${m.provider} / ${m.model}`).join(' · ')
-            : 'Live council is not configured yet. Source preview and the synthetic sample are available.';
+          byId('review-configuration').textContent = configured ? '' : 'Model setup required for live reviews.';
+          byId('review-models').textContent = configured ? data.models.map(m => `${m.provider} / ${m.model}`).join(' · ')
+            : 'No model providers connected.';
           ready();
         }).catch(error => { if (current === epoch) byId('review-configuration').textContent = error.message; });
+        const id = new URLSearchParams(window.location.search).get('notebook');
+        if (id) task(async token => {
+          const notebook = await request('/api/notebooks/' + encodeURIComponent(id));
+          if (token !== epoch) return;
+          notebookId = notebook.id; byId('review-transcript').value = notebook.document.transcript;
+          invalidate();
+          const origin = byId('review-origin'), link = element('a', notebook.document.title);
+          link.href = '/notebook?id=' + encodeURIComponent(notebook.id);
+          origin.replaceChildren(link, element('span', ' · original transcript')); origin.hidden = false;
+          status.textContent = '';
+        });
       }
     });
   }

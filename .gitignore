@@ -9,3 +9,5 @@ __pycache__/
 .DS_Store
 .data/
 claimci-observations/
+client_secret*.json
+google-oauth*.json

@@ -13,6 +13,68 @@ from test_baseline import completion
 
 
 class StorageContract:
+    def test_google_grant_reopen_and_generation_guard(self):
+        self.google_user_id = "google-test-" + str(uuid4())
+        self.repository.create_user(self.google_user_id, self.google_user_id, "test-hash")
+        self.repository.save_google_connection(self.google_user_id, "encrypted-fixture", "generation-a", ["readonly-fixture"])
+        reopened = self.reopened()
+        self.assertIsNone(reopened.get_google_connection("another-owner"))
+        self.assertEqual(reopened.get_google_connection(self.google_user_id)["encrypted_tokens"], "encrypted-fixture")
+        self.assertFalse(reopened.refresh_google_connection(self.google_user_id, "stale-generation", "must-not-save"))
+        self.assertTrue(reopened.refresh_google_connection(self.google_user_id, "generation-a", "updated-encrypted-fixture"))
+        reopened.save_google_connection(self.google_user_id, "new-authorization", "generation-b", ["readonly-fixture"])
+        reopened.delete_google_connection(self.google_user_id, "generation-a")
+        self.assertEqual(reopened.get_google_connection(self.google_user_id)["encrypted_tokens"], "new-authorization")
+        reopened.delete_google_connection(self.google_user_id, "generation-b")
+        self.assertIsNone(reopened.get_google_connection(self.google_user_id))
+
+    def test_import_leases_survive_reopen_and_completion_creates_one_notebook(self):
+        self.job_id = str(uuid4())
+        record_name = "conferenceRecords/test-" + str(uuid4())
+        created = self.repository.create_meet_import(self.job_id, None, "demo", record_name, 1)
+        duplicate = self.repository.create_meet_import(str(uuid4()), None, "demo", record_name, 1)
+        self.assertEqual(created["id"], duplicate["id"])
+        self.assertIsNone(self.repository.get_meet_import(self.job_id, "another-owner"))
+        lease = self.repository.claim_meet_import(1)
+        self.assertEqual(lease["id"], self.job_id)
+        reopened = self.reopened()
+        self.assertIsNone(reopened.claim_meet_import(2))
+        new_lease = reopened.claim_meet_import(242)
+        self.assertNotEqual(lease["lease_token"], new_lease["lease_token"])
+        self.assertFalse(reopened.finish_meet_import(self.job_id, lease["lease_token"], "needs_speakers", now=243, message="stale"))
+        self.assertTrue(reopened.finish_meet_import(self.job_id, new_lease["lease_token"], "needs_speakers", now=243,
+            message="Ready", payload={"private":"original source"}, reads=5))
+        document = {"title":"Synthetic imported notebook", "source_hash":"immutable-source", "notes":[]}
+        self.notebook_id, reused = reopened.complete_meet_import(self.job_id, None, document)
+        again, reused_again = reopened.complete_meet_import(self.job_id, None, {**document, "title":"Must not overwrite"})
+        self.assertFalse(reused)
+        self.assertTrue(reused_again)
+        self.assertEqual(again, self.notebook_id)
+        self.assertEqual(reopened.get_notebook(again)["document"], document)
+        job = reopened.get_meet_import(self.job_id, None)
+        self.assertEqual(job["status"], "complete")
+        self.assertEqual(job["google_requests"], 5)
+        self.assertEqual(job["payload"], {})
+        self.assertEqual(len(reopened.notebook_history(again)), 1)
+
+    def test_notebook_history_survives_reopen_and_rejects_stale_writes(self):
+        self.notebook_id = str(uuid4())
+        original = {"title": "Private notebook", "source_hash": "unchanged-source", "notes": [{"body": "Original note"}]}
+        self.repository.create_notebook(self.notebook_id, original)
+        self.assertIsNone(self.repository.get_notebook(self.notebook_id, owner_id="another-owner"))
+        self.assertEqual(self.repository.notebook_history(self.notebook_id, owner_id="another-owner"), [])
+        updated = {**original, "title": "Edited title"}
+        self.repository.update_notebook(self.notebook_id, updated, 0, [{"field":"title","before":"Private notebook","after":"Edited title"}])
+        reopened = self.reopened()
+        record = reopened.get_notebook(self.notebook_id)
+        self.assertEqual(record["revision"], 1)
+        self.assertEqual(record["document"]["source_hash"], "unchanged-source")
+        self.assertEqual([row["revision"] for row in reopened.notebook_history(self.notebook_id)], [1, 0])
+        self.assertTrue(any(row["id"] == self.notebook_id for row in reopened.list_notebooks()))
+        with self.assertRaises(SessionConflict):
+            reopened.update_notebook(self.notebook_id, original, 0, [])
+        self.assertEqual(reopened.get_notebook(self.notebook_id)["document"]["title"], "Edited title")
+
     def test_ownership_filters_reads_updates_and_runs(self):
         self.repository.create_session(self.sid, self.debate, owner_id="alice")
         self.assertIsNone(self.repository.load_session(self.sid, self.client, owner_id="bob"))
@@ -114,7 +176,7 @@ class PostgresTests(StorageContract, unittest.TestCase):
         from app.api.application import create_app
 
         with patch.dict(os.environ, {"DATABASE_URL": self.dsn, "DEBATEBOT_AUTH_REQUIRED": "0"}, clear=True):
-            app = create_app(client=self.client, load_environment=False)
+            app = create_app(client=self.client, load_environment=False, start_workers=False)
             with TestClient(app) as api:
                 created = api.post("/api/debate", json={"persona_key": "socratic"})
                 self.sid = created.json()["session_id"]
@@ -124,7 +186,7 @@ class PostgresTests(StorageContract, unittest.TestCase):
                     run = api.post("/api/research", json={"claim": "Saved research claim"})
                 self.run_id = run.json()["run_id"]
             # New application and repository instance; no session cache is shared.
-            restarted = create_app(client=self.client, load_environment=False)
+            restarted = create_app(client=self.client, load_environment=False, start_workers=False)
             self.assertIsNot(app.state.repository, restarted.state.repository)
             with TestClient(restarted) as api:
                 restored = api.get(f"/api/debate/{self.sid}")
@@ -153,3 +215,9 @@ class PostgresTests(StorageContract, unittest.TestCase):
         # Remove only records whose unique IDs this test created, never user data.
         self.repository._execute(lambda conn: conn.execute("DELETE FROM debate_sessions WHERE id=%s", (self.sid,)))
         self.repository._execute(lambda conn: conn.execute("DELETE FROM analysis_runs WHERE id=%s", (self.run_id,)))
+        if hasattr(self, "notebook_id"):
+            self.repository._execute(lambda conn: conn.execute("DELETE FROM interview_notebooks WHERE id=%s", (self.notebook_id,)))
+        if hasattr(self, "job_id"):
+            self.repository._execute(lambda conn: conn.execute("DELETE FROM meet_import_jobs WHERE id=%s", (self.job_id,)))
+        if hasattr(self, "google_user_id"):
+            self.repository._execute(lambda conn: conn.execute("DELETE FROM app_users WHERE id=%s", (self.google_user_id,)))

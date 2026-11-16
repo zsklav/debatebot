@@ -79,5 +79,7 @@ jobs:
           node --check frontend/message-format.js
           node --check frontend/workspace-ui.js
           node --check frontend/post-review.js
+          node --check frontend/notebook.js
+          node --check frontend/meet-automation.js
       - name: Test rendering, authentication and request contracts
         run: node --test tests/test_ui.cjs

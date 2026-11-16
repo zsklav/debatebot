@@ -8,6 +8,10 @@ from langchain_core.runnables import RunnableLambda
 ENDPOINTS = {"groq":"https://api.groq.com/openai/v1/chat/completions",
              "openrouter":"https://openrouter.ai/api/v1/chat/completions"}
 
+# Catalog-verified, optional reasoning: reserve the bounded output for JSON.
+NON_REASONING_FREE_MODELS = frozenset({"google/gemma-4-31b-it:free", "particle-ai/particle-1:free",
+    "inclusionai/ling-3.2-flash:free", "nvidia/nemotron-3.5-super-vl:free"})
+
 
 class ReviewConfigurationError(ValueError):
     pass
@@ -29,6 +33,20 @@ class ModelRoute:
         return {"role":self.role, "provider":self.provider, "model":self.model, "declared_family":self.family}
 
 
+def free_only():
+    value = os.environ.get("POST_REVIEW_FREE_ONLY", "0").strip().lower()
+    if value not in {"0", "1", "false", "true"}:
+        raise ReviewConfigurationError("POST_REVIEW_FREE_ONLY must be 0 or 1")
+    return value in {"1", "true"}
+
+
+def enforce_route(provider, model):
+    if provider == "openrouter" and model in {"auto", "openrouter/auto", "openrouter/free"}:
+        raise ReviewConfigurationError("Use an explicit model ID; automatic routers cannot establish three declared families")
+    if free_only() and not (provider == "openrouter" and model.endswith(":free")):
+        raise ReviewConfigurationError("Free-only review requires explicit OpenRouter :free models; paid and unpriced routes are blocked")
+
+
 def configuration():
     routes = []
     for role in ("a", "b", "judge"):
@@ -39,8 +57,7 @@ def configuration():
         key = os.environ.get(prefix + "_API_KEY") or os.environ.get("GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY", "")
         if provider not in ENDPOINTS or not model or not family or not key:
             raise ReviewConfigurationError("Configure POST_REVIEW_A/B/JUDGE provider, model, family and server-side credentials")
-        if provider == "openrouter" and (model.endswith(":free") or model in {"openrouter/auto", "auto"}):
-            raise ReviewConfigurationError("Use explicit versioned model routes; automatic/free routing is not supported")
+        enforce_route(provider, model)
         routes.append(ModelRoute(role, provider, model, family, key))
     if len({r.family for r in routes}) != 3 or len({r.model.casefold() for r in routes}) != 3:
         raise ReviewConfigurationError("Declare three distinct model IDs and families; no silent single-model fallback")
@@ -55,6 +72,9 @@ class ModelAdapter:
         self.runnable = RunnableLambda(self._request)
 
     def _request(self, messages):
+        # Recheck at dispatch so a directly constructed/stale route cannot bypass
+        # an enabled free-only policy. Rejections consume no provider requests.
+        enforce_route(self.route.provider, self.route.model)
         if self.requests:
             raise ReviewProviderError("Per-role request budget exhausted")
         self.requests += 1
@@ -64,6 +84,10 @@ class ModelAdapter:
             body["reasoning_effort"] = "low"
         if self.route.provider == "openrouter":
             body["provider"] = {"allow_fallbacks":False, "require_parameters":True}
+            if self.route.model.endswith(":free"):
+                body["provider"]["max_price"] = {"prompt":0, "completion":0, "request":0, "image":0}
+            if self.route.model in NON_REASONING_FREE_MODELS:
+                body["reasoning"] = {"enabled":False}
         try:
             with httpx.Client(timeout=httpx.Timeout(35, connect=8), transport=self.transport, follow_redirects=False) as client:
                 response = client.post(ENDPOINTS[self.route.provider], headers={"Authorization":f"Bearer {self.route.api_key}"}, json=body)

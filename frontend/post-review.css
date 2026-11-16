@@ -1,13 +1,16 @@
-.review-nav { display:flex; justify-content:space-between; gap:14px; border-bottom:1px solid var(--line); padding-bottom:18px; font-size:12px; color:var(--muted); }
-.review-nav a { text-underline-offset:4px; }
-.section-heading h1 { font:400 38px/1.2 Georgia,serif; margin:32px 0 12px; }
-.sample-actions { margin:20px 0 28px; }
+.review-input-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:40px; align-items:start; padding:24px 0; border-top:1px solid var(--line); margin-top:24px; }
+.review-source-inputs { min-width:0; }
+.review-source-inputs h2 { font-size:18px; font-weight:600; margin:0 0 24px; }
+.review-source-inputs>.scope-details { margin-top:24px; }
 #review-form>label,.field-heading { margin-top:24px; }
 .field-heading { display:flex; justify-content:space-between; align-items:center; }
 .file-import { cursor:pointer; font-size:11px; color:var(--accent); }
 .file-import input { width:1px; height:1px; padding:0; opacity:0; }
-fieldset { border:1px solid var(--line); border-radius:12px; padding:20px; margin:26px 0; }
-legend { font-size:13px; padding:0 7px; }
+fieldset { min-width:0; border:0; border-left:1px solid var(--line); padding:0 0 0 32px; margin:0; }
+legend { float:left; width:100%; font-size:18px; font-weight:600; padding:0; margin-bottom:24px; }
+fieldset>.criterion-input { clear:both; }
+.optional-criteria { margin-top:24px; color:var(--muted); font-size:12px; }
+.optional-criteria[open]>summary { margin-bottom:16px; }
 .criterion-input+.criterion-input { margin-top:20px; }
 .criterion-input textarea { min-height:70px; margin-top:8px; }
 .review-consent { display:flex; align-items:flex-start; gap:10px; line-height:1.7; font-size:12px; font-weight:400; color:var(--muted); }
@@ -21,4 +24,13 @@ legend { font-size:13px; padding:0 7px; }
 .review-source { border-top:1px solid var(--line); padding-top:15px; margin-top:18px; scroll-margin-top:20px; }
 .review-source p { white-space:pre-wrap; font-size:13px; color:var(--muted); }
 #review-preview { margin-top:20px; }
-@media(max-width:650px) { .section-heading h1 { font-size:31px; } .brand { font-size:21px; } .review-nav { font-size:11px; } fieldset { padding:15px; } }
+#review-preview>.lab-card { margin-top:0; }
+#review-result { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:32px; }
+#review-result>.lab-card { margin-top:0; }
+#review-result>.review-banner,#review-result>.helper,#review-result>.review-scope { grid-column:1/-1; }
+@media(max-width:900px) {
+  .review-input-grid { grid-template-columns:1fr; gap:28px; }
+  fieldset { border-left:0; border-top:1px solid var(--line); padding:24px 0 0; }
+  legend { padding-top:24px; }
+  #review-result { grid-template-columns:1fr; }
+}

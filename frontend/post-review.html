@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#171614" />
   <title>Review Council — Post-interview evidence</title>
-  <link rel="stylesheet" href="/static/evidence-lab.css?v=review1" />
-  <link rel="stylesheet" href="/static/post-review.css?v=review1" />
+  <link rel="icon" href="/static/debatebot-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/evidence-lab.css?v=workspace2" />
+  <link rel="stylesheet" href="/static/post-review.css?v=clean1" />
 </head>
 <body>
 <div class="app-shell">
-  <header class="site-header"><a class="brand" href="/review"><span class="brand-symbol" aria-hidden="true">✳</span>Review Council</a></header>
+  <header class="site-header"><a class="brand" href="/" aria-label="DebateBot home"><img src="/static/debatebot-mark.svg" width="34" height="34" alt="" />DebateBot</a><nav class="site-nav" aria-label="Main navigation"><a href="/">Debate</a><a href="/notebook">Notebook</a><a href="/review" aria-current="page">Review Council</a></nav></header>
   <main>
     <section class="account-card" aria-labelledby="auth-title">
       <div class="account-copy"><h2 id="auth-title">Sign in</h2><p id="account-description">Keep interview evidence and reports private.</p><p id="auth-user" hidden></p></div>
@@ -23,34 +24,41 @@
       </div>
     </section>
     <div id="app-workspace" class="character-workspace" hidden>
-      <nav class="review-nav"><span>Post-interview review</span><a href="/">DebateBot workspace ↗</a></nav>
-      <div class="section-heading"><h1>Review the evidence.</h1><p>Start with a completed interview. Every finding stays connected to an answer.</p></div>
+      <div class="workspace-heading"><div class="section-heading"><h1>Review Council</h1></div><button id="review-demo" class="button-secondary" type="button">Try a sample</button></div>
       <p id="review-configuration" class="helper" role="status">Checking model configuration…</p>
-      <div class="sample-actions"><button id="review-demo" class="button-secondary" type="button">Try synthetic sample · no API calls</button></div>
+      <p id="review-origin" class="helper" hidden></p>
       <form id="review-form">
+        <div class="review-input-grid">
+        <section class="review-source-inputs" aria-label="Interview sources">
+        <h2>Interview sources</h2>
         <label for="review-job">Job description</label><textarea id="review-job" rows="3" minlength="20" maxlength="3000" required placeholder="The role and its job-related responsibilities…"></textarea>
         <div class="field-heading"><label for="review-transcript">Completed interview transcript</label><label class="file-import">Import .txt<input id="review-file" type="file" accept=".txt,.md,text/plain,text/markdown" /></label></div>
-        <textarea id="review-transcript" rows="7" minlength="30" maxlength="14000" required placeholder="Interviewer: How did you implement caching?&#10;Candidate: I used Redis with a 60-second TTL…"></textarea>
-        <p class="helper">Label turns Interviewer: and Candidate:. Use synthetic, redacted or explicitly authorized material. Text input only in this version.</p>
-        <fieldset><legend>What should the reviewers assess?</legend>
+        <textarea id="review-transcript" rows="7" minlength="30" maxlength="60000" required placeholder="[00:12] Interviewer: How did you implement caching?&#10;[00:19] Candidate: I used Redis with a 60-second TTL…"></textarea>
+        <details class="scope-details"><summary>Transcript format</summary><p>Use Interviewer: and Candidate: speaker labels, with optional timestamps. Import VTT or Meet JSON in Notebook first. Use authorized material.</p></details>
+        <details class="scope-details"><summary>Add resume context (optional)</summary><label for="review-resume">Resume text</label><textarea id="review-resume" rows="3" maxlength="4000" placeholder="Resume assertions remain unverified claims, separate from interview answers."></textarea></details>
+        </section>
+        <fieldset><legend>Assessment rubric</legend>
           <div class="criterion-input"><label for="criterion-name-1">Competency 1</label><input id="criterion-name-1" maxlength="70" value="Caching" required /><label class="sr-only" for="criterion-description-1">Competency 1 rubric</label><textarea id="criterion-description-1" rows="2" maxlength="300" required>Explain the implemented caching mechanism, trade-offs and limitations using interview evidence.</textarea></div>
+          <details class="optional-criteria"><summary>Add competencies</summary>
           <div class="criterion-input"><label for="criterion-name-2">Competency 2 (optional)</label><input id="criterion-name-2" maxlength="70" placeholder="For example: Transactions" /><label class="sr-only" for="criterion-description-2">Competency 2 rubric</label><textarea id="criterion-description-2" rows="2" maxlength="300" placeholder="What specific evidence would demonstrate this competency?"></textarea></div>
           <div class="criterion-input"><label for="criterion-name-3">Competency 3 (optional)</label><input id="criterion-name-3" maxlength="70" /><label class="sr-only" for="criterion-description-3">Competency 3 rubric</label><textarea id="criterion-description-3" rows="2" maxlength="300" placeholder="Job-specific criteria only; no personal or demographic ratings."></textarea></div>
+          </details>
         </fieldset>
-        <details class="scope-details"><summary>Add resume context (optional)</summary><label for="review-resume">Resume text</label><textarea id="review-resume" rows="3" maxlength="4000" placeholder="Resume assertions remain unverified claims, separate from interview answers."></textarea></details>
-        <div class="lab-actions"><button id="review-prepare" class="button-secondary" type="button">Preview sources · no model call</button></div>
+        </div>
+        <div class="lab-actions"><button id="review-prepare" class="button-secondary" type="button">Preview sources</button></div>
         <section id="review-preview" hidden aria-label="Normalized source preview"></section>
-        <label class="review-consent"><input id="review-consent" type="checkbox" />I reviewed the source preview and am authorized to send these excerpts to the configured external model services.</label>
-        <div class="lab-actions"><span class="helper">Up to 3 model requests. No automatic retries.</span><button id="review-run" type="submit" disabled>Run review council</button></div>
+        <details class="scope-details review-models"><summary>Model providers</summary><p id="review-models">Checking providers…</p></details>
+        <label class="review-consent"><input id="review-consent" type="checkbox" />I reviewed the sources and authorize sending them to the configured model providers.</label>
+        <div class="lab-actions"><span class="helper">Up to 3 model calls</span><button id="review-run" type="submit" disabled>Run review</button></div>
       </form>
       <p id="review-status" class="status-text" role="status" aria-live="polite"></p>
       <section id="review-result" hidden aria-label="Council report"></section>
       <details class="saved-run"><summary>Reopen a saved report</summary><div class="saved-run-controls"><div><label for="review-run-id">Report ID</label><input id="review-run-id" autocomplete="off" /></div><button id="review-reopen" class="button-secondary" type="button">Open report</button></div></details>
-      <p class="review-scope">Evidence review assistance, not a hiring decision. Model diversity and exact quotes do not guarantee fair or correct assessments.</p>
+      <details class="saved-run"><summary>About this review</summary><p class="review-scope">This assists human review; it does not make hiring decisions. Model diversity and exact quotes do not guarantee fair or correct assessments. Source preview makes no model calls. Live review uses up to three requests without automatic retries.</p></details>
     </div>
   </main>
 </div>
-<script src="/static/post-review.js?v=review1" defer></script>
+<script src="/static/post-review.js?v=clean2" defer></script>
 <script src="/static/auth-ui.js?v=review1" defer></script>
 </body>
 </html>

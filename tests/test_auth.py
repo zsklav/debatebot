@@ -35,7 +35,7 @@ class AuthApiTests(unittest.TestCase):
         self.addCleanup(self.env.stop)
         self.repository = MemoryRepository()
         self.routes = evidence_routes
-        app = create_app(repository=self.repository, client=self.provider, load_environment=False)
+        app = create_app(repository=self.repository, client=self.provider, load_environment=False, start_workers=False)
         self.a = TestClient(app)
         self.b = TestClient(app)
         self.addCleanup(self.a.close)

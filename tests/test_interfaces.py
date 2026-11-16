@@ -184,7 +184,7 @@ class InterfaceTests(unittest.TestCase):
 
     def api(self):
         self.repository = MemoryRepository()
-        app = create_app(repository=self.repository, client=self.provider, load_environment=False)
+        app = create_app(repository=self.repository, client=self.provider, load_environment=False, start_workers=False)
         client = TestClient(app, raise_server_exceptions=False)
         self.addCleanup(client.close)
         return client

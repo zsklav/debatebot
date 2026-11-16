@@ -23,13 +23,23 @@ configured repository, registers security/error handling, and mounts:
 | `app/api/debates.py` | Debate and critique HTTP contracts |
 | `app/api/evidence.py` | Evidence/research HTTP contracts and saved-run reads |
 | `app/review/routes.py` | Source preview, review requests and owner-scoped report reads |
-| `frontend/` | HTML/CSS/JS served at `/static`; workspaces at `/` and `/review` |
+| `app/notebook/routes.py` | Transcript import, editable notes, revision history, explicit AI digest and Markdown export |
+| `app/integrations/` | Google OAuth, native Meet reads, background import jobs and repository extensions |
+| `frontend/` | HTML/CSS/JS served at `/static`; workspaces at `/`, `/notebook` and `/review` |
 
 HTTP routers map requests to feature functions. Model prompts, retrieval and
 review orchestration belong in their feature modules. Application storage and
 authentication are shared; feature logic does not import the ASGI entry point.
 
 ## Review flow
+
+The optional [Interview Notebook](NOTEBOOK.md) precedes this workflow. The shared
+`app/core/transcripts.py` parser normalizes speaker labels and supplied timestamps.
+Notebooks retain the imported source, canonical transcript and source checksum;
+notes and their edit history are separate from this evidence. The council loads
+the immutable canonical transcript and verifies notebook ownership/source equality
+on linked requests. Editing notes does not alter assessment evidence or require
+another model request for an otherwise identical cached review.
 
 ```mermaid
 flowchart TD
@@ -72,6 +82,25 @@ requests. It is not a model benchmark.
 
 ## Other feature boundaries
 
+The optional Meet integration follows OAuth connect → select conference → leased
+background polling → complete native transcript snapshot → confirm speaker roles
+→ notebook. Migration 005 persists encrypted grants and owner-scoped jobs;
+completion locks the job and creates its notebook/revision in one transaction.
+Expired leases recover after a crash, and stale workers cannot overwrite a
+cancelled or newly claimed job. The worker performs no model calls. A labelled
+demo uses the same queue with a synthetic capture adapter.
+
+OAuth state is short-lived process memory, bound to the initiating browser and
+still-active local session. Refresh grants are encrypted with a stable Fernet
+key and include their local owner. Callback queries are redacted from Uvicorn
+access logs. The app lifespan starts/stops the worker; tests can disable it via
+`create_app(start_workers=False)`. Run one application worker with this prototype.
+
+`app/notebook/digest.py` makes at most one explicit Groq request per new digest,
+using original sources rather than edited notes. Schema and exact-source quote
+validation precede saving. Reuse includes original-source hash, model and policy;
+optimistic saves protect concurrent human edits. It does not invoke the council.
+
 - `app/debate/`: persona configuration, bounded conversation context, argument
   scoring and single-weakness critique. The API supplies the model client.
 - `app/evidence/`: deterministic ingestion, local Qdrant index, relevance
@@ -97,6 +126,8 @@ when supplying relative file arguments.
 | Data | Storage and lifetime |
 | --- | --- |
 | Accounts, sessions, debates and saved reports | PostgreSQL with `DATABASE_URL`; otherwise explicitly volatile memory |
+| Notebooks and edit history | Owner-scoped current documents and atomic revision events (migration 004); source content is immutable through the edit API |
+| Google grants and import jobs | Encrypted grant blobs, leases and private fetched snapshots (migration 005); completed jobs reference a single notebook and clear duplicate payloads |
 | Standard Evidence Lab corpus vectors | `.data/qdrant`, with single-process serialized access |
 | Interview source vectors | Per-run in-memory Qdrant; closed after retrieval |
 | Embedding weights | `.data/models`; setup downloads explicitly, API uses cached files |

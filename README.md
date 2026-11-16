@@ -14,6 +14,16 @@ interviews. Built with **FastAPI, LangGraph, LangChain, Qdrant and PostgreSQL**.
 
 ## What works
 
+- **Interview Notebook** at `/notebook`: import speaker-labelled text, WebVTT or
+  exported Meet JSON; map speakers, browse timestamped questions/answers, edit
+  source excerpt notes, save revision history and export Markdown. This flow
+  makes zero model requests by default. Optional AI notes use one explicitly
+  authorized Groq request with exact-source validation and saved-result reuse.
+  [Notebook formats and limits](docs/NOTEBOOK.md).
+- **Google Meet automation**: OAuth with readonly access, encrypted grants,
+  bounded transcript polling, pagination, explicit speaker confirmation and
+  duplicate-safe notebook creation. A labelled synthetic automation test needs
+  no Google credentials. [Connect and test](docs/GOOGLE_MEET_SETUP.md).
 - **Post-interview Review Council** at `/review`: speaker-labelled transcript,
   job description and up to three competency criteria; two independent reviewers
   assess the same retrieved evidence, then an anonymous adjudicator reconciles
@@ -87,11 +97,19 @@ Then start the server:
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open [Review Council](http://127.0.0.1:8000/review) or
+Open [Interview Notebook](http://127.0.0.1:8000/notebook),
+[Review Council](http://127.0.0.1:8000/review) or
 [DebateBot](http://127.0.0.1:8000/). Create a local account and try the synthetic
 sample. The server uses cached embedding files and never downloads them at
 startup. Stop the API before reindexing the on-disk evidence store; use one
 worker with local Qdrant.
+
+The notebook works without embedding setup. Expand **Import from Google Meet**
+and use **Try sample import** to exercise the queue without Google or model calls. For actual Meet imports,
+[configure your OAuth Web client](docs/GOOGLE_MEET_SETUP.md); native transcription
+must already be enabled in Meet. Live Google access has not yet been tested with
+user credentials. Use **Open in Review Council** to assess the original source
+transcript; edited notes are never substituted as interview evidence.
 
 ## Enable live council reviews
 
@@ -110,6 +128,10 @@ services. Use synthetic/redacted or explicitly authorized interview material.
 There is no automatic PII redaction in this prototype.
 
 See [review setup, scope and limits](docs/INTERVIEW_PLATFORM_PLAN.md).
+For the prepared free model combination and zero-price guard, follow the
+[first live test](docs/LIVE_REVIEW_TEST.md). It needs an OpenRouter API key and
+is subject to free-tier capacity/rate limits; no credits purchase is required
+for basic free-model access. The live provider test is still pending.
 
 ## Repository layout
 
@@ -121,6 +143,8 @@ app/                 Python application
   debate/            Persona conversations, scoring and critique
   evidence/          Ingestion, retrieval, assessment and research agent
   review/            Post-interview contracts, council, adapters and routes
+  notebook/          Timestamped imports, editable notes, history and export
+  integrations/      Google OAuth, native Meet reads and durable import jobs
   auth.py            Accounts and cookie sessions
   storage.py         Memory/PostgreSQL repositories and migration CLI
 frontend/            Local HTML, CSS and JavaScript; no CDN or build step
@@ -172,8 +196,25 @@ and [recorded development evaluations](eval_results/README.md).
 
 ## Container
 
-`Dockerfile` starts `app.main:app` on port 8080 and installs the complete dependency
-set. Configure runtime secrets, PostgreSQL and a prepared embedding cache/index
-through the host. `.env`, `.data/` and observation artifacts are excluded from the
-image. Container image construction and a public Hugging Face Spaces deployment
-still need verification; the repository does not claim a working public URL.
+`Dockerfile` installs the complete dependency set, runs as uid 1000 (as Hugging Face
+Spaces does), downloads the local embedding model and indexes the study-summary
+corpus at build time, then starts one `app.main:app` worker on port 8080. `.env`,
+`.data/` and observation artifacts are excluded from the image. The image has not
+been built or deployed yet; the repository does not claim a working public URL.
+
+### Intended public demo configuration
+
+No model key is set on a public Space, so nobody else can spend its quota or send
+transcripts to a model provider.
+
+| Works without keys | Needs a key or setup |
+| --- | --- |
+| Accounts, notebooks, transcript import, editing and export | Debate, research and AI notes (`GROQ_API_KEY`) |
+| Review Council **Try a sample** (scripted outputs, labelled synthetic) | Live Review Council (`OPENROUTER_API_KEY` and `POST_REVIEW_*`) |
+| Synthetic Meet import demo | Real Google Meet import (OAuth client, not tested) |
+
+Without `DATABASE_URL`, accounts and reports are volatile and disappear when the
+Space restarts. Open the app at its direct `*.hf.space` address, not inside the
+Hugging Face page: the app sends `X-Frame-Options: DENY` and its session cookie is
+`SameSite=Strict`, so an embedded frame will not work. Set the Space variable
+`DEBATEBOT_PUBLIC_ORIGIN` to that exact `https://` address.

@@ -154,13 +154,25 @@ interview evidence. The first version expects English text and Candidate:/
 Interviewer: turn labels. Contact/demographic data is not automatically redacted;
 use synthetic/redacted or authorized material and inspect the preview.
 
+The [Interview Notebook](NOTEBOOK.md) now adds TXT/MD, WebVTT and exported Meet
+JSON import, explicit speaker mapping, preserved timestamps, question–answer
+groups, editable extractive notes, revision history and Markdown export. It
+hands the original normalized transcript to the council; note edits are excluded.
+Shared parsing is bounded to 60,000 characters and 240 turns. This is local
+import. Google OAuth, bounded native transcript fetching and a one-call optional
+AI digest have since been added; see [connection and testing](GOOGLE_MEET_SETUP.md).
+Live Google access and live AI-summary quality still need credentialed validation.
+
 Live routes are server-side `POST_REVIEW_A/B/JUDGE_PROVIDER`, `_MODEL`, `_FAMILY`
 and optional `_API_KEY` variables (see `.env.example`). Initial adapters support
 Groq and OpenRouter's OpenAI-compatible endpoints. Keys may fall back to the
 corresponding server provider key. Three distinct explicit model IDs and declared
 families are required; family labels are operator assertions, not verified model
 independence. There is no automatic provider fallback or JSON repair retry.
-OpenRouter automatic/free routes are excluded in this first adapter. The judge
+Automatic routers remain excluded. Explicit OpenRouter `:free` catalog variants
+are supported with zero-price provider filters and no paid fallback. Setting
+`POST_REVIEW_FREE_ONLY=1` rejects all other review routes before dispatch; see
+[the free live-test setup](LIVE_REVIEW_TEST.md). The judge
 gets anonymous findings, original evidence and shuffled reviewer order; model
 identity/style bias is not guaranteed to disappear. No live provider request
 was made while implementing or testing this slice.
