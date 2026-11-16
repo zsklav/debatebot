@@ -8,22 +8,8 @@ from app.core.paths import MIGRATIONS, ROOT
 from threading import RLock
 
 from app.debate.engine import Debate
-
-
-class StorageUnavailable(RuntimeError):
-    pass
-
-
-class SessionConflict(RuntimeError):
-    pass
-
-
-def jsonb(value):
-    try:
-        from psycopg.types.json import Jsonb
-    except ImportError as error:
-        raise StorageUnavailable("Install requirements/storage.txt") from error
-    return Jsonb(value)
+from app.core.persistence import SessionConflict, StorageUnavailable, jsonb
+from app.integrations.persistence import MemoryIntegrationRepository, PostgresIntegrationRepository
 
 
 def snapshot(debate):
@@ -38,12 +24,27 @@ def restore(data, client):
     return debate
 
 
-class MemoryRepository:
+def notebook_record(row, mode):
+    if row is None:
+        return None
+    result = deepcopy(row)
+    result.pop("owner_id", None)
+    result["id"] = str(result["id"])
+    for key in ("created_at", "updated_at"):
+        if isinstance(result.get(key), datetime):
+            result[key] = result[key].isoformat()
+    result["storage"] = mode
+    return result
+
+
+class MemoryRepository(MemoryIntegrationRepository):
     mode = "memory"
 
     def __init__(self):
         self.sessions, self.runs = {}, {}
         self.users, self.tokens = {}, {}
+        self.notebooks, self.notebook_edits = {}, {}
+        self.google_connections, self.meet_import_jobs = {}, {}
         self.lock = RLock()
 
     def create_session(self, sid, debate, owner_id=None):
@@ -84,6 +85,44 @@ class MemoryRepository:
             self.users[username] = {"id": user_id, "username": username, "password_hash": password_hash}
             return True
 
+    def create_notebook(self, identifier, document, owner_id=None):
+        with self.lock:
+            if identifier in self.notebooks:
+                raise SessionConflict("Notebook already exists")
+            now = datetime.now(timezone.utc).isoformat()
+            self.notebooks[identifier] = deepcopy({"id": identifier, "owner_id": owner_id,
+                "document": document, "revision": 0, "created_at": now, "updated_at": now})
+            self.notebook_edits[identifier] = [{"revision": 0, "created_at": now,
+                "changes": [{"field": "created", "source_hash": document["source_hash"]}]}]
+
+    def get_notebook(self, identifier, owner_id=None):
+        with self.lock:
+            row = self.notebooks.get(identifier)
+            return notebook_record(row, self.mode) if row and row["owner_id"] == owner_id else None
+
+    def list_notebooks(self, owner_id=None):
+        with self.lock:
+            rows = sorted((row for row in self.notebooks.values() if row["owner_id"] == owner_id),
+                          key=lambda row: row["updated_at"], reverse=True)[:20]
+            return [{"id": row["id"], "title": row["document"]["title"],
+                     "revision": row["revision"], "updated_at": row["updated_at"]} for row in rows]
+
+    def update_notebook(self, identifier, document, revision, changes, owner_id=None):
+        with self.lock:
+            row = self.notebooks.get(identifier)
+            if not row or row["owner_id"] != owner_id or row["revision"] != revision:
+                raise SessionConflict("Notebook changed")
+            now = datetime.now(timezone.utc).isoformat()
+            row.update(document=deepcopy(document), revision=revision + 1, updated_at=now)
+            self.notebook_edits[identifier].append({"revision": revision + 1, "created_at": now,
+                                                   "changes": deepcopy(changes)})
+
+    def notebook_history(self, identifier, owner_id=None):
+        with self.lock:
+            if self.get_notebook(identifier, owner_id) is None:
+                return []
+            return deepcopy(self.notebook_edits[identifier][-20:][::-1])
+
     def user_by_name(self, username):
         with self.lock:
             return deepcopy(self.users.get(username))
@@ -104,7 +143,7 @@ class MemoryRepository:
             self.tokens.pop(token_hash, None)
 
 
-class PostgresRepository:
+class PostgresRepository(PostgresIntegrationRepository):
     mode = "postgresql"
 
     def __init__(self, dsn):
@@ -167,6 +206,46 @@ class PostgresRepository:
         return self._execute(lambda conn: conn.execute(
             "INSERT INTO app_users(id,username,password_hash) VALUES (%s,%s,%s) ON CONFLICT(username) DO NOTHING RETURNING id",
             (user_id, username, password_hash)).fetchone()) is not None
+
+    def create_notebook(self, identifier, document, owner_id=None):
+        def create(connection):
+            connection.execute("INSERT INTO interview_notebooks(id,owner_id,document) VALUES (%s,%s,%s)",
+                               (identifier, owner_id, jsonb(document)))
+            connection.execute("INSERT INTO notebook_revisions(notebook_id,revision,changes) VALUES (%s,0,%s)",
+                               (identifier, jsonb([{"field": "created", "source_hash": document["source_hash"]}])))
+        self._execute(create)
+
+    def get_notebook(self, identifier, owner_id=None):
+        row = self._execute(lambda conn: conn.execute(
+            "SELECT * FROM interview_notebooks WHERE id=%s AND owner_id IS NOT DISTINCT FROM %s",
+            (identifier, owner_id)).fetchone())
+        return notebook_record(row, self.mode)
+
+    def list_notebooks(self, owner_id=None):
+        rows = self._execute(lambda conn: conn.execute(
+            "SELECT id,document->>'title' AS title,revision,updated_at FROM interview_notebooks "
+            "WHERE owner_id IS NOT DISTINCT FROM %s ORDER BY updated_at DESC LIMIT 20", (owner_id,)).fetchall())
+        return [{**row, "id": str(row["id"]), "updated_at": row["updated_at"].isoformat()} for row in rows]
+
+    def update_notebook(self, identifier, document, revision, changes, owner_id=None):
+        def update(connection):
+            row = connection.execute(
+                "UPDATE interview_notebooks SET document=%s,revision=revision+1,updated_at=now() "
+                "WHERE id=%s AND owner_id IS NOT DISTINCT FROM %s AND revision=%s RETURNING revision",
+                (jsonb(document), identifier, owner_id, revision)).fetchone()
+            if row is None:
+                raise SessionConflict("Notebook changed")
+            connection.execute("INSERT INTO notebook_revisions(notebook_id,revision,changes) VALUES (%s,%s,%s)",
+                               (identifier, row["revision"], jsonb(changes)))
+        self._execute(update)
+
+    def notebook_history(self, identifier, owner_id=None):
+        rows = self._execute(lambda conn: conn.execute(
+            "SELECT r.revision,r.changes,r.created_at FROM notebook_revisions r "
+            "JOIN interview_notebooks n ON n.id=r.notebook_id "
+            "WHERE n.id=%s AND n.owner_id IS NOT DISTINCT FROM %s ORDER BY r.revision DESC LIMIT 20",
+            (identifier, owner_id)).fetchall())
+        return [{**row, "created_at": row["created_at"].isoformat()} for row in rows]
 
     def user_by_name(self, username):
         return self._execute(lambda conn: conn.execute("SELECT * FROM app_users WHERE username=%s", (username,)).fetchone())

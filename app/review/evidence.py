@@ -3,52 +3,43 @@
 from functools import lru_cache
 import os
 from pathlib import Path
-import re
 from threading import RLock
 
 from langchain_core.documents import Document
 from .models import ReviewInput, Source
 
 from app.core.paths import ROOT
+from app.core.transcripts import ROLES, parse_transcript
 _lock = RLock()
 
 
 def prepare(payload: ReviewInput):
+    return prepare_transcript(payload.transcript, payload.resume)
+
+
+def prepare_transcript(transcript, resume=""):
     sources = []
-    speaker, start, buffer = None, 1, []
-    def flush(end):
-        if not buffer:
-            return
-        text = "\n".join(buffer).strip()
-        if not text:
-            return
-        # Preserve source locations and exact substrings while bounding chunks.
-        for offset in range(0, len(text), 1200):
-            sources.append(Source(id=f"transcript-{len(sources) + 1:03}", kind="transcript",
-                                  speaker=speaker or "Unknown", start_line=start, end_line=end,
-                                  text=text[offset:offset + 1200]))
-    lines = payload.transcript.splitlines()
-    for number, line in enumerate(lines, 1):
-        match = re.match(r"^\s*(Candidate|Applicant|Interviewee|Interviewer)\s*:\s*(.*)$", line, re.I)
-        if match:
-            flush(number - 1)
-            speaker = "Interviewer" if match[1].casefold() == "interviewer" else "Candidate"
-            start, buffer = number, [match[2]]
-        elif speaker:
-            buffer.append(line)
-        elif line.strip():
-            raise ValueError("Label transcript turns as Interviewer: or Candidate:")
-    flush(len(lines))
+    for index, turn in enumerate(parse_transcript(transcript), 1):
+        speaker = ROLES.get(turn.speaker.casefold())
+        if not speaker:
+            raise ValueError("Map named speakers to Candidate/Interviewer in the notebook before review")
+        for offset in range(0, len(turn.text), 1200):
+            sources.append(Source(
+                id=f"transcript-{len(sources) + 1:03}", kind="transcript", speaker=speaker,
+                start_line=turn.start_line, end_line=turn.end_line, text=turn.text[offset:offset + 1200],
+                turn_id=f"turn-{index:03}", start_time=turn.start_time, end_time=turn.end_time,
+            ))
     if not any(source.speaker == "Candidate" for source in sources):
         raise ValueError("At least one Candidate: answer is required")
-    if payload.resume:
-        for offset in range(0, len(payload.resume), 1000):
-            sources.append(Source(id=f"resume-{offset // 1000 + 1:03}", kind="resume", speaker="Resume claim",
-                                  start_line=payload.resume[:offset].count("\n") + 1,
-                                  end_line=payload.resume[:offset + 1000].count("\n") + 1,
-                                  text=payload.resume[offset:offset + 1000]))
-    if len(sources) > 64:
-        raise ValueError("Use at most 64 transcript/resume segments in the first version")
+    for offset in range(0, len(resume), 1000):
+        sources.append(Source(
+            id=f"resume-{offset // 1000 + 1:03}", kind="resume", speaker="Resume claim",
+            start_line=resume[:offset].count("\n") + 1,
+            end_line=resume[:offset + 1000].count("\n") + 1,
+            text=resume[offset:offset + 1000],
+        ))
+    if len(sources) > 324:
+        raise ValueError("Use at most 324 transcript/resume segments")
     return sources
 
 

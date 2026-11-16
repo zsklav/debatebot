@@ -17,9 +17,9 @@ class ApplicationTests(unittest.TestCase):
     def test_keyless_source_preview_and_assets_work_from_another_directory(self):
         with patch.dict(os.environ, {"DEBATEBOT_AUTH_REQUIRED": "0"}, clear=True), \
                 tempfile.TemporaryDirectory() as folder, chdir(folder):
-            app = create_app(repository=MemoryRepository(), load_environment=False)
+            app = create_app(repository=MemoryRepository(), load_environment=False, start_workers=False)
             with TestClient(app) as client:
-                for path in ("/", "/review", "/static/post-review.js", "/static/evidence-lab.css"):
+                for path in ("/", "/review", "/notebook", "/static/notebook.js", "/static/post-review.js", "/static/evidence-lab.css"):
                     self.assertEqual(client.get(path).status_code, 200, path)
                 preview = client.post("/api/reviews/prepare", json=SAMPLE)
                 self.assertEqual(preview.status_code, 200)
@@ -29,8 +29,8 @@ class ApplicationTests(unittest.TestCase):
 
     def test_factory_instances_do_not_share_private_sessions(self):
         with patch.dict(os.environ, {"DEBATEBOT_AUTH_REQUIRED": "0"}, clear=True):
-            first = create_app(repository=MemoryRepository(), client=Mock(), load_environment=False)
-            second = create_app(repository=MemoryRepository(), client=Mock(), load_environment=False)
+            first = create_app(repository=MemoryRepository(), client=Mock(), load_environment=False, start_workers=False)
+            second = create_app(repository=MemoryRepository(), client=Mock(), load_environment=False, start_workers=False)
             with TestClient(first) as a, TestClient(second) as b:
                 response = a.post("/api/debate", json={"persona_key": "socratic"})
                 self.assertEqual(response.status_code, 200)

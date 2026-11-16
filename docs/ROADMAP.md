@@ -14,13 +14,30 @@ Live adapters support explicit Groq/OpenRouter routes. Distinct declared model
 families are required; this is configuration, not evidence of neutral assessment.
 The synthetic demo uses scripted outputs and zero external model requests.
 
-Verified: 170 Python tests (one optional embedding smoke skipped), 16 frontend
+Interview Notebook now precedes the council at `/notebook`: timestamped TXT/MD,
+WebVTT and exported Meet JSON import, explicit speaker assignments, Q&A groups,
+extractive note drafts, human edits, optimistic saves, revision history and
+Markdown export. Its council handoff uses the unchanged original transcript.
+File import and edits use zero model requests. Google OAuth, readonly native
+artifact fetching, bounded durable polling and duplicate-safe finalization are
+now implemented. Optional source-linked AI notes use one authorized request.
+See [notebook formats](NOTEBOOK.md) and [Google connection/test setup](GOOGLE_MEET_SETUP.md).
+
+Verified: 211 Python tests (one optional embedding smoke skipped), 20 frontend
 tests, and a real local-browser synthetic run saved/reopened through PostgreSQL.
+The notebook was created, edited and reopened in the browser; source timestamps
+and review handoff were checked. A real cached-encoder graph smoke also passed
+with the timestamped notebook sources and scripted model outputs.
+The synthetic import queue also created a real PostgreSQL notebook in the
+browser; repeat imports referenced the same notebook with zero Google/model calls.
 No live multi-model assessment has been run. The call budget is at most three
 requests per new live run, with successful identical results reused for ten
 minutes within one account and configuration.
 
-Next: configure and smoke-test the chosen live routes on synthetic examples;
+Live Google OAuth/import still needs the user's OAuth client and a transcription-
+enabled test meeting. HTTP mocks and the synthetic queue demo do not verify this.
+
+Next: perform a credentialed Google smoke test; configure and smoke-test the chosen live routes on synthetic examples;
 build a held-out, human-labelled assessment set and compare against a single
 model with an equal budget; add finding-level human corrections and report
 deletion/retention controls. Document/audio import and extra challenge rounds

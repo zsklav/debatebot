@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#171614" />
   <title>DebateBot — Challenge your thinking</title>
-  <link rel="stylesheet" href="/static/evidence-lab.css?v=20261115f" />
+  <link rel="icon" href="/static/debatebot-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/evidence-lab.css?v=workspace2" />
 </head>
 <body>
   <section id="file-open-notice" hidden>
@@ -22,7 +23,8 @@
   </script>
   <div id="main-content" class="app-shell">
     <header class="site-header">
-      <a class="brand" href="/" aria-label="DebateBot home"><span class="brand-symbol" aria-hidden="true">✳</span>DebateBot</a>
+      <a class="brand" href="/" aria-label="DebateBot home"><img src="/static/debatebot-mark.svg" width="34" height="34" alt="" />DebateBot</a>
+      <nav class="site-nav" aria-label="Main navigation"><a href="/" aria-current="page">Debate</a><a href="/notebook">Notebook</a><a href="/review">Review Council</a></nav>
     </header>
     <main>
 <section class="account-card" aria-labelledby="auth-title">
@@ -73,7 +75,6 @@
     </div>
   </section>
       <div id="app-workspace" class="character-workspace" hidden>
-        <p class="helper"><a href="/review">Open post-interview Review Council ↗</a></p>
         <div class="workspace-body">
           <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
             <button id="tab-debate" role="tab" aria-selected="true" aria-controls="view-debate" type="button">Chat</button>
@@ -82,7 +83,7 @@
           </div>
 <section id="view-debate" class="workspace-section debate-room" role="tabpanel" aria-labelledby="tab-debate">
     <section id="persona-picker">
-      <h2 id="debate-title">Choose a perspective.</h2>
+      <h1 id="debate-title">Start a debate</h1>
       <p id="debate-status" class="status-text" role="status">
       </p>
       <div id="persona-buttons" class="persona-grid">
@@ -130,11 +131,9 @@
           <h2 id="lab-title">
             Evidence Lab
           </h2>
-          <p>
-            Test a claim against evidence.
-          </p>
         </div>
       </div>
+      <div class="evidence-workbench"><div class="evidence-inputs">
       <div class="lab-layout">
         <div class="lab-composer">
           <form id="lab-form">
@@ -196,8 +195,10 @@
         </button>
       </div>
     </details>
+    </div>
     <section id="lab-result" aria-label="Analysis results" hidden>
     </section>
+    </div>
   </section>
 <section id="view-critique" class="workspace-section quick-check" role="tabpanel" aria-labelledby="tab-critique" hidden>
   <div>

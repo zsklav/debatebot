@@ -39,6 +39,12 @@ def build_router(repository, require_user):
             raise HTTPException(422, str(error))
 
     def execute(payload, owner, scripted):
+        if payload.notebook_id:
+            notebook = repository.get_notebook(payload.notebook_id, owner_id=owner)
+            if notebook is None:
+                raise HTTPException(404, "Notebook not found")
+            if payload.transcript != notebook["document"]["transcript"]:
+                raise HTTPException(422, "Linked reviews must use the notebook's original normalized transcript")
         try:
             prepare(payload)  # Invalid transcripts fail before any model request.
         except ValueError as error:
@@ -61,6 +67,8 @@ def build_router(repository, require_user):
                 raise HTTPException(503, "Local review retrieval is unavailable. Install retrieval dependencies and cache the embedding model first.")
             run_id = str(uuid4())
             report.update(run_id=run_id, storage=repository.mode)
+            if payload.notebook_id:
+                report.update(notebook_id=payload.notebook_id, notebook_source_hash=notebook["document"]["source_hash"])
             # Only store the transcript/profile in the already owner-scoped run.
             repository.save_run(run_id, "post_interview_review", payload.transcript, report, owner_id=owner)
             if report["status"] == "partial":

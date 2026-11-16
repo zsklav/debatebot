@@ -983,3 +983,202 @@ instance isolation and real PostgreSQL reopening. A separate HTTP smoke used
 the real cached encoder, saved/reopened a synthetic report and made zero model
 requests. The new entry point served both workspaces and assets successfully.
 See [the architecture and data flow](ARCHITECTURE.md) for module boundaries.
+
+## Session 29 — Source-linked interview notebooks
+
+`/notebook` now accepts labelled text, WebVTT captions and exported Meet JSON.
+`app/core/transcripts.py` parses supplied speakers and timestamps without
+inferring identities or inventing missing times. Users assign one candidate,
+the interviewers and any excluded participants before saving. Invalid/reversed
+times, mixed clocks, reordered timestamped turns, partial JSON exports and
+ambiguous caption speakers are rejected. Text imports support tab-indented
+continuation lines containing colons. The bounds are 60,000 characters, 240 turns
+and 12 speaker labels.
+
+The notebook groups interviewer prompts with subsequent candidate answers.
+Draft notes copy up to 600 characters of answer text, explicitly labelled as
+extracts rather than AI summaries. Human edits get a different label. A missing
+recorded answer is visible but is not interpreted as lack of skill. Source links
+open the exact original normalized excerpt and retain supplied clock ranges.
+
+Migration 004 adds private notebooks and revision events. Each explicit save
+checks the expected revision and writes the current document plus its change
+event atomically. A stale writer receives 409 instead of silently replacing
+another edit. Owner checks apply to listing, reopening, editing, history and
+Markdown export. Revision history shows before/after values; the source snapshot
+and checksum are immutable through the note-editing endpoint.
+
+The Review Council handoff loads the original canonical transcript and notebook
+ID. The server checks ownership and equality to the saved transcript. Notes are
+excluded from model evidence. Changing only notes therefore reuses an identical
+cached source assessment rather than spending more model requests. Editing the
+source in the review form detaches the notebook association.
+
+Verified: 186 Python tests ran (one optional skip), and all 18 frontend tests
+passed. Real PostgreSQL tests cover reopen/history and stale writes. Browser
+checks created and edited a synthetic notebook, opened its timestamped sources,
+reopened it, and confirmed that the council received the original answer but
+not the edited note. A real cached BGE/Qdrant/LangGraph smoke completed on the
+timestamped sources with scripted reviewers and zero external model requests.
+Google OAuth, meeting capture, AI digest generation, semantic rubric coverage
+and finding-level assessment corrections remain separate future features.
+
+Explain back: why must a summary or human note stay separate from evidence?
+What does optimistic version checking prevent? Why is a missing timestamp
+different from zero seconds? Why must paginated exports not silently appear
+complete? How can note edits avoid triggering another costly review?
+
+## Session 30 — Connecting Meet without spending model calls on polling
+
+Think of this as two different systems. Google authentication and transcript
+import are conventional API automation. The council is a LangGraph/LLM workflow.
+An LLM is unnecessary for checking whether a file is ready, following pages,
+validating timestamps or saving a job. Keeping those steps deterministic reduces
+token use and makes failures reproducible.
+
+**OAuth** lets a user grant readonly Meet access without giving this application
+their Google password. A short-lived code is exchanged on the server. State and
+a browser cookie bind the callback to the initiating session; PKCE binds the
+exchange to a secret verifier. The normal account cookie stays SameSite Strict.
+A separate, temporary Lax cookie works on Google's top-level return navigation.
+Refresh tokens are encrypted with a stable Fernet key, scoped to a local owner,
+and never sent to the frontend. They cannot be hashed like login tokens because
+the server must recover them to refresh access.
+
+**Durable jobs** store waiting/processing/ready/complete states in PostgreSQL.
+A worker claims a job with an expiring lease. If it crashes, a later worker can
+resume after the lease expires. A unique lease token prevents the old worker
+from overwriting a cancellation or newer claim. Finalization locks the job and
+creates its notebook in the same transaction. A uniqueness constraint on local
+owner/provider/conference makes repeated clicks reuse the same import. These
+controls give duplicate-safe persisted results; they cannot guarantee zero
+repeated Google reads after a network timeout or crash.
+
+**Pagination** is part of data correctness. Meet returns native participant IDs,
+transcript sessions and entry pages. All supported pages are assembled before
+import. Duplicate display names remain separate speakers. FILE_GENERATED means
+the artifact is ready, not that every minute of the meeting was captured.
+The user still confirms roles and inspects speech-recognition errors.
+
+**AI notes** are an optional one-call operation after importing. Only original
+sources go to Groq, not edited human notes. Strict JSON/schema validation and
+exact quote checks reject broken references and incomplete responses. They
+do not prove interpretation or completeness. Saved notes are reused by original
+source hash/model/policy. Concurrent edits use revision checks; a short cache
+can reuse a successful generation after a save conflict without calling again.
+
+The labelled automation demo exercises real persistence with synthetic capture.
+HTTP mocks test native Google contracts and OAuth errors. Neither demonstrates
+that the user's account supports transcription or that live Google/model calls
+will succeed. See [Google setup and test steps](GOOGLE_MEET_SETUP.md).
+
+Validation: 211 Python tests ran with one optional embedding smoke skipped; all
+20 frontend contracts passed. PostgreSQL checks used a separate temporary test
+database. In the actual browser the demo moved to speaker confirmation, saved a
+notebook, reopened it, reused the same notebook on another import and passed its
+original timestamped transcript to the council. No Google or model call was
+made. Live OAuth and generation quality remain unverified.
+
+Explain back: why are separate API keys not a fairness guarantee? Why does an
+import worker need leases and a uniqueness constraint? Which request counters
+exclude OAuth reads? Why can an exact quotation still support a bad summary?
+Which steps require an LLM, and which steps should make zero model requests?
+
+## Session 31 — Free model routes and bounded requests
+
+Review Council now supports explicit OpenRouter `:free` catalog variants.
+The local configuration first selected Gemma, Ling and Nemotron (Reviewer A was
+later switched to Particle; see Session 32), with one API key and three declared
+model families. Distinct keys are credentials, not independent
+evaluators; distinct families also do not establish fair or correct judgments.
+
+The local `POST_REVIEW_FREE_ONLY=1` setting rejects paid IDs, automatic routers
+and unconstrained providers during both configuration and dispatch. Each free
+request also sends zero maximum prompt, completion, per-request and image prices
+to OpenRouter. No model fallback array, provider fallback or automatic retry is
+used. A 429 is a failed request, not a reason to start a paid model.
+
+JSON mode and optional reasoning were checked in the public catalog. Reasoning
+is disabled for these exact models to reserve the existing 1800-token output
+budget for final JSON. Free does not mean unlimited: capacity, daily quota and
+model availability still affect reliability. The saved-result cache avoids
+new calls for an unchanged successful review; failed/partial results are not
+silently treated as successes.
+
+HTTP mocks verify the price caps, paid-route rejection, single-call budget and
+rate-limit failure behavior. These tests alone did not involve a live model; the
+first live runs are described in Session 32. See
+[the free test setup](LIVE_REVIEW_TEST.md).
+
+Explain back: why is a free model followed by a paid fallback not a free workflow?
+Why does checking a model catalog not verify output quality? Why check the
+free-only policy again at dispatch instead of only during application startup?
+
+## Session 32 — First live runs, a small evaluation, and what the guards caught
+
+The first live council runs used the free OpenRouter routes on a synthetic caching
+interview. They did not work cleanly, and the failures taught more than a success
+would have.
+
+**A rate limit looks like a vague error.** The page first said only "Request
+failed." That message came from a validation error (an empty transcript, because
+the review page was opened without a notebook), not from a model. The fix was to
+show the failing field. Later, Gemma returned HTTP 429 three times. The report
+recorded a generic failure, so a small diagnostic was added: the exception type
+and HTTP status only, never message text, because provider errors can contain
+prompts or keys. Only our own validators raise a bare `ValueError` with fixed
+messages, so those messages are safe to keep.
+
+**A partial report is the correct result for a failed reviewer.** With one valid
+reviewer and one 429, the judge is skipped and no consolidated conclusion is
+shown. The model was then changed. ERNIE was rejected before any request because
+its catalog entry has mandatory high-effort reasoning, which could consume the
+1800-token JSON budget. Particle (reasoning optional) replaced Gemma for Reviewer A.
+
+**Do not ask a model for a fact the code can compute.** The judge returned
+`agreed` for a criterion where the two reviewers had different statuses, and the
+validator rejected the whole judge output. This repeated on a second attempt, so
+it was systematic, not random. "Agreed" is a function of three statuses, so the
+code now derives it; the judge only chooses `proposed_resolution` or `unresolved`.
+Changed labels are recorded with their old and new value. The rule that disagreement
+can never be called agreement is unchanged; it is now enforced by construction, with
+the old check kept as a safety net. After this change the same case completed once
+live. That is one observation, not proof the change caused it.
+
+**Exact-quote validation has several different failures.** One reviewer was rejected
+for a quote that was not in the candidate's answers. Because one message covered
+four causes, the validator now says which: unknown source, the resume was cited,
+a non-Candidate turn was cited, or the quote was not verbatim. The cause of that
+reviewer's failure has still not been observed, because the next attempt hit a 429.
+
+**Baselines without extra requests.** `tools/review_eval.py` scores the council and
+each reviewer separately. A reviewer already receives the same frozen evidence and
+prompt, so its own output is the single-model baseline. The council costs up to
+three requests per case; a baseline costs one. The tool does nothing live unless
+`--live` is given, caps requests per run, saves after every case, skips finished
+cases and stops on the first 401, 402, 403 or 429. Cases with no valid output
+count as "no result", not as wrong answers.
+
+**Lenient scoring hid disagreement.** Each label has a primary status and optional
+acceptable alternatives. With alternatives allowed, every system scored 7/7 even
+though the reviewers differed on two criteria. A strict score (primary label only)
+and a list of criteria where systems differed exposed that. Labels can be edited
+and the saved predictions re-scored with no new model requests.
+
+**What the numbers do and do not say.** There are nine synthetic cases and ten
+criteria, labelled by the project author (`author_reviewed`), not by an independent
+reviewer. No system gave an unsupported `demonstrated` where the label disallowed
+it. In the latest saved results the council's strict score was 7/10 against 7/10
+for Ling and 5/10 for Particle, and Ling and the council each had one case
+without a result. One changed label moved scores by a whole criterion, so
+these counts are a development check for bugs. They are not accuracy, fairness
+or evidence that the council beats a single model. A held-out, independently
+labelled set and repeated runs are still needed. The free daily limit (about 50
+requests) also limits how often this can be run.
+
+Explain back: why can a rate limit look like a validation error to the user, and
+how can diagnostics avoid leaking secrets? Why should the code compute `agreed`
+instead of the judge? Why is a reviewer's own output a valid baseline here, and
+what makes it an unequal comparison against the council? How can lenient scoring
+make three systems look identical? Why does author labelling limit what you can
+claim?

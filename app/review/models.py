@@ -2,6 +2,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.core.transcripts import MAX_TRANSCRIPT_CHARS
 
 
 class StrictModel(BaseModel):
@@ -15,12 +16,13 @@ class Criterion(StrictModel):
 
 
 class ReviewInput(StrictModel):
-    transcript: str = Field(min_length=30, max_length=14000)
+    transcript: str = Field(min_length=30, max_length=MAX_TRANSCRIPT_CHARS)
     job_description: str = Field(min_length=20, max_length=3000)
     resume: str = Field(default="", max_length=4000)
     criteria: list[Criterion] = Field(min_length=1, max_length=3)
     consent_to_external_processing: bool = False
     evidence_confirmed: bool = False
+    notebook_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
 
     @model_validator(mode="after")
     def validate_criteria(self):
@@ -40,6 +42,9 @@ class Source(StrictModel):
     start_line: int
     end_line: int
     text: str
+    turn_id: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
 
 
 class Citation(StrictModel):
@@ -79,13 +84,35 @@ def validate_findings(result, criteria, allowed_sources):
         seen = set()
         for reference in finding.evidence:
             source = allowed_sources.get(reference.source_id)
-            if (source is None or source.kind != "transcript" or source.speaker != "Candidate" or
-                    not reference.quote or reference.quote not in source.text):
-                raise ValueError("Findings must quote supplied candidate answers exactly")
+            if source is None:
+                raise ValueError("Findings must quote supplied candidate answers exactly: unknown source ID")
+            if source.kind != "transcript":
+                raise ValueError("Findings must quote supplied candidate answers exactly: cited the resume")
+            if source.speaker != "Candidate":
+                raise ValueError("Findings must quote supplied candidate answers exactly: cited a non-Candidate turn")
+            if not reference.quote or reference.quote not in source.text:
+                raise ValueError("Findings must quote supplied candidate answers exactly: quote is not verbatim")
             key = (reference.source_id, reference.quote)
             if key in seen:
                 raise ValueError("Duplicate evidence reference")
             seen.add(key)
+
+
+def settle_resolution(result, reviews):
+    """Derive 'agreed' in code: it is a fact about statuses, not a judgment.
+
+    The judge only chooses between a proposal and unresolved. Returns the criteria
+    whose label was changed, with the judge's label and the new one, for the run audit.
+    """
+    statuses = [{f["criterion_id"]: f["status"] for f in review["findings"]} for review in reviews]
+    changed = []
+    for finding in result.findings:
+        unanimous = all(review[finding.criterion_id] == finding.status for review in statuses)
+        wanted = "agreed" if unanimous else ("proposed_resolution" if finding.resolution == "agreed" else finding.resolution)
+        if wanted != finding.resolution:
+            changed.append({"criterion_id": finding.criterion_id, "from": finding.resolution, "to": wanted})
+            finding.resolution = wanted
+    return changed
 
 
 def validate_adjudication(result, reviews):

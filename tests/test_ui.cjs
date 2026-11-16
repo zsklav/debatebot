@@ -298,3 +298,62 @@ test('partial post-interview report never presents a consolidated assessment', (
   assert.match(root.textContent,/No consolidated assessment/);
   assert.doesNotMatch(root.textContent,/Review summary/);
 });
+
+test('notebook timeline preserves timestamps, inert text and unanswered prompts', () => {
+  const {renderTimeline, stamp}=require('../frontend/notebook.js');
+  const root=new Element('main');
+  renderTimeline({sources:[
+    {id:'s1',speaker:'Interviewer',text:'<script>Question?</script>',start_time:'00:12'},
+    {id:'s2',speaker:'Candidate',text:'<img src=x onerror=alert(1)>',start_time:'00:19',end_time:'00:31'},
+    {id:'s3',speaker:'Interviewer',text:'Unanswered follow-up.'}],
+    notes:[{id:'note-001',body:'A human note',kind:'human_note',source_ids:['s1','s2']},
+      {id:'note-002',body:'',kind:'source_excerpt',source_ids:['s3']}],
+    timeline:[{note_id:'note-001',question_source_ids:['s1'],answer_source_ids:['s2']},
+      {note_id:'note-002',question_source_ids:['s3'],answer_source_ids:[]}]},root);
+  assert.match(root.textContent,/00:19/);
+  assert.match(root.textContent,/No candidate answer captured/);
+  assert.match(root.textContent,/Human-edited note/);
+  assert.equal(stamp({}), 'Time unavailable');
+  const all=n=>[n,...n.children.flatMap(all)];
+  assert.equal(all(root).filter(n=>['script','img'].includes(n.tagName)).length,0);
+  assert.equal(all(root).filter(n=>n.tagName==='textarea').length,2);
+  assert.match(root.textContent,/<img src=x/);
+});
+
+test('notebook edit history renders prior and corrected notes as inert text', () => {
+  const {renderHistory}=require('../frontend/notebook.js');
+  const root=new Element('main');
+  renderHistory([{revision:1,created_at:'2026-11-15T10:00:00Z',changes:[
+    {field:'note-001',before:'Original excerpt.',after:'<script>Edited note</script>'}]}],root);
+  assert.match(root.textContent,/Revision 1/);
+  assert.match(root.textContent,/Original excerpt/);
+  assert.match(root.textContent,/<script>Edited note/);
+  assert.equal(root.children[0].tagName,'details');
+});
+
+test('automation jobs identify synthetic capture and keep provider text inert', () => {
+  const {renderJobs}=require('../frontend/meet-automation.js');
+  const root=new Element('main');
+  renderJobs([{id:'job-1',provider:'demo',status:'needs_speakers',attempts:2,google_requests:0,
+    message:'<script>Provider text</script>'}],root,{prepare(){},change(){}});
+  assert.match(root.textContent,/Synthetic automation demo/);
+  assert.match(root.textContent,/No live Google account/);
+  assert.match(root.textContent,/0 recorded Meet API reads/);
+  assert.match(root.textContent,/Confirm speakers/);
+  assert.match(root.textContent,/<script>Provider text/);
+  const all=n=>[n,...n.children.flatMap(all)];
+  assert.equal(all(root).filter(n=>n.tagName==='script').length,0);
+});
+
+test('AI notes show source quotes safely without replacing human notes', () => {
+  const {renderDigest}=require('../frontend/notebook.js');
+  const root=new Element('main');
+  renderDigest({sources:[{id:'s2',start_time:'00:19'}],ai_digest:{model:'test-model',scope:'Human review required.',
+    points:[{text:'<img src=x>Summary',quote:'Exact source text.',source_id:'s2'}]}},root);
+  assert.match(root.textContent,/Human review required/);
+  assert.match(root.textContent,/Exact source text/);
+  assert.match(root.textContent,/00:19/);
+  const all=n=>[n,...n.children.flatMap(all)];
+  assert.equal(all(root).filter(n=>n.tagName==='img').length,0);
+  assert.equal(all(root).find(n=>n.tagName==='a').href,'#notebook-source-s2');
+});

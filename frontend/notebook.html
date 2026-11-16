@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171614" />
+  <title>Interview Notebook — DebateBot</title>
+  <link rel="icon" href="/static/debatebot-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/evidence-lab.css?v=workspace2" />
+  <link rel="stylesheet" href="/static/notebook.css?v=clean1" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="site-header"><a class="brand" href="/" aria-label="DebateBot home"><img src="/static/debatebot-mark.svg" width="34" height="34" alt="" />DebateBot</a><nav class="site-nav" aria-label="Main navigation"><a href="/">Debate</a><a href="/notebook" aria-current="page">Notebook</a><a href="/review">Review Council</a></nav></header>
+  <main>
+    <section class="account-card" aria-labelledby="auth-title">
+      <div class="account-copy"><h2 id="auth-title">Sign in</h2><p id="account-description">Keep interview notes and sources private.</p><p id="auth-user" hidden></p></div>
+      <div class="account-controls">
+        <form id="auth-form"><div class="auth-fields">
+          <div><label for="auth-username">Username</label><input id="auth-username" autocomplete="username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_-]{3,40}" /></div>
+          <div><label for="auth-password">Password (12–128 characters)</label><input id="auth-password" type="password" autocomplete="current-password" required minlength="12" maxlength="128" /></div>
+        </div><div class="auth-actions"><button type="submit" value="login">Sign in</button><button class="button-secondary" type="submit" value="register">Create account</button></div></form>
+        <button id="auth-logout" class="button-secondary" type="button" hidden>Sign out</button><p id="auth-status" class="status-text" role="status"></p>
+      </div>
+    </section>
+    <div id="app-workspace" class="character-workspace" hidden>
+      <div class="workspace-heading"><div class="section-heading"><h1>Interview notebook</h1></div><div class="notebook-actions"><button id="notebook-new" class="button-secondary" type="button" hidden>New notebook</button><button id="notebook-sample" class="button-secondary" type="button">Try a sample</button></div></div>
+      <div class="notebook-layout">
+      <aside class="notebook-sidebar" aria-label="Imports and saved notebooks">
+      <details class="saved-run" open><summary>Saved notebooks</summary><div id="notebook-recent" class="notebook-recent"></div></details>
+      <details id="meet-automation" class="lab-card" aria-label="Google Meet automation">
+        <summary>Import from Google Meet</summary>
+        <p id="meet-connection" class="helper">Checking connection…</p>
+        <div class="notebook-actions"><button id="meet-connect" type="button" disabled>Connect Google</button><button id="meet-disconnect" class="button-secondary" type="button" hidden>Disconnect</button><button id="meet-demo" class="button-secondary" type="button">Try sample import</button></div>
+        <p class="helper">Sample import uses synthetic data. No Google or model calls.</p>
+        <div id="meet-picker" hidden><label for="meet-code">Meet link or code (optional filter)</label><div class="notebook-field"><input id="meet-code" maxlength="200" placeholder="abc-defg-hij" /><button id="meet-list" class="button-secondary" type="button">Load recent meetings</button></div><div id="meet-meetings" class="notebook-recent"></div></div>
+        <p id="meet-status" class="status-text" role="status" aria-live="polite"></p>
+        <details class="scope-details"><summary>Setup &amp; limits</summary><p>Read-only access to Meet records, participants and transcripts. Meet transcription must already be enabled. Imports stop waiting after 30 checks or 20 minutes; fetching uses Google API reads without model calls.</p><p id="meet-setup" hidden>Follow docs/GOOGLE_MEET_SETUP.md to configure your OAuth client, then restart the server.</p></details>
+        <details id="meet-activity" class="scope-details"><summary>Import activity</summary><div id="meet-jobs"></div></details>
+      </details>
+      </aside>
+      <div class="notebook-main">
+      <section id="notebook-import">
+        <p id="notebook-import-source" class="helper" hidden></p>
+        <form id="notebook-import-form">
+          <div class="notebook-field"><label for="notebook-content">Transcript</label><label class="notebook-file">Import file<input id="notebook-file" type="file" accept=".txt,.md,.vtt,.json" /></label></div>
+          <textarea id="notebook-content" rows="8" required minlength="30" maxlength="60000" placeholder="[00:12] Interviewer: Describe your caching implementation.&#10;[00:19] Candidate: I added Redis with a 60-second TTL…"></textarea>
+          <details class="scope-details notebook-import-options"><summary>Import options</summary>
+          <label for="notebook-title">Title</label><input id="notebook-title" value="Interview notebook" required minlength="2" maxlength="100" />
+          <div class="notebook-field"><label for="notebook-format">Transcript format</label><select id="notebook-format"><option value="text">Speaker-labelled text</option><option value="vtt">WebVTT captions</option><option value="meet_json">Exported Meet entries (JSON)</option></select></div>
+          <p>TXT/MD, WebVTT or complete Meet JSON; UTF-8, up to 60,000 characters and 240 turns. Label each speaker. Optional timestamps are preserved. For text containing colons, tab-indent continuation lines. Use authorized material. File import and preview make no model calls.</p>
+          </details>
+          <div class="lab-actions"><button type="submit">Preview transcript</button></div>
+        </form>
+        <section id="notebook-preview" hidden>
+          <h2>Confirm speakers</h2>
+          <div id="notebook-speakers"></div><p id="notebook-mapping-status" class="helper"></p>
+          <details class="lab-card"><summary>Imported conversation</summary><div id="notebook-preview-turns"></div></details>
+          <div class="lab-actions"><button id="notebook-create" type="button" disabled>Save notebook</button></div>
+        </section>
+      </section>
+      <section id="notebook-editor" hidden>
+        <label class="sr-only" for="notebook-saved-title">Notebook title</label><input id="notebook-saved-title" minlength="2" maxlength="100" />
+        <div class="notebook-meta"><span id="notebook-meta" class="helper"></span><span id="notebook-provenance" class="helper" hidden></span><span id="notebook-dirty" class="helper" hidden>Unsaved changes</span></div>
+        <details class="lab-card notebook-ai" aria-label="AI interview digest">
+          <summary>AI notes</summary><p id="notebook-digest-model" class="helper">Checking model setup…</p>
+          <label class="notebook-consent"><input id="notebook-digest-consent" type="checkbox" />I authorize sending the original transcript to the configured model for source-linked AI notes.</label>
+          <button id="notebook-digest-generate" class="button-secondary" type="button" disabled>Generate notes</button>
+          <div id="notebook-digest"></div>
+        </details>
+        <div id="notebook-timeline"></div>
+        <div class="notebook-savebar"><button id="notebook-save" type="button" disabled>Save</button><button id="notebook-revert" class="button-secondary" type="button" hidden>Discard edits</button><a id="notebook-export" href="#" title="Download notes as Markdown">Export</a><a id="notebook-review" href="#">Review Council</a></div>
+        <details id="notebook-history" class="saved-run"><summary>Edit history</summary><p class="helper">Latest 20 saved revisions. Original source text stays unchanged.</p><div id="notebook-history-items"></div></details>
+        <details class="saved-run"><summary>Notebook details</summary><p id="notebook-source-details" class="helper"></p><p class="helper">Notes begin as exact answer excerpts. Human edits stay separate from the original transcript used by Review Council.</p><p id="notebook-provenance-details" class="helper"></p></details>
+      </section>
+      <p id="notebook-status" class="status-text" role="status" aria-live="polite"></p>
+      </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="/static/notebook.js?v=clean1" defer></script>
+<script src="/static/meet-automation.js?v=clean1" defer></script>
+<script src="/static/auth-ui.js?v=notebook1" defer></script>
+</body>
+</html>
