@@ -9,8 +9,41 @@ short_description: Evidence-backed debates and post-interview review
 
 # DebateBot · Review Council
 
-An AI application for challenging arguments and reviewing evidence from completed
-interviews. Built with **FastAPI, LangGraph, LangChain, Qdrant and PostgreSQL**.
+**After an interview, get an evidence report: for each skill, the candidate's exact
+words, checked by code.** Built with **FastAPI, LangGraph, LangChain, Qdrant and
+PostgreSQL**.
+
+| Step | What happens | Model calls |
+|---|---|---|
+| 1. Import | Paste a transcript, or import VTT / Meet JSON in the Notebook | 0 |
+| 2. Pick a role | Choose a preset (backend, frontend, ML) or write up to 3 skills | 0 |
+| 3. Preview | See the exact transcript pieces that will be sent | 0 |
+| 4. Review | Local retrieval picks evidence; two reviewers assess it; a judge reconciles | up to 3 |
+| 5. Report | Each skill: status, exact quotes, agreement. A person makes every decision | 0 |
+
+Every quote must appear word for word in a candidate answer, or the report rejects
+it. The tool never recommends hiring or ranks people. The debate workspace is a
+separate practice tool in the same app.
+
+## Live demo
+
+[valkszz-debatebot.hf.space](https://valkszz-debatebot.hf.space) runs on a free
+Hugging Face Space (CPU). Create an account, then open **Notebook** and **Review
+Council** and use **Try a sample**.
+
+Limits of the public demo:
+
+- **Scripted sample by default.** The Review Council sample uses scripted outputs and
+  is labelled synthetic. The retrieval, graph and validation steps are real. Live
+  reviews run only when the Space owner adds a free-model key, with a daily cap
+  ([how to turn them on](docs/HF_SPACE_LIVE_REVIEW.md)). The `/review` page shows
+  whether live reviews are on and how many are left today.
+- **Debate, research and AI notes are off** (they need a Groq key).
+- **Storage is volatile.** Without a database, accounts and saved reports disappear
+  when the Space restarts or sleeps.
+- **Do not enter real interview data.** This is a demonstration.
+- **Google Meet import is not available.** Only the synthetic import demo works.
+- Open it at the direct link, not inside the Hugging Face page.
 
 ## What works
 
@@ -47,12 +80,19 @@ are engineering controls, not proof of correct or fair assessment.
 
 ## Current validation
 
-The synthetic council and local evidence pipeline have been exercised. Live
-Groq/OpenRouter council adapters are implemented but **live council output quality
-has not been evaluated**. The demo is not a model benchmark. Review family labels
-are configuration assertions, not verified independence. Human corrections,
-report deletion/retention controls and held-out quality/fairness evaluation remain
-pending. Public deployment has not been verified.
+The council has run live on three free OpenRouter models against synthetic
+interviews. A development evaluation (`python -m tools.review_eval`) scores the
+council and each reviewer on nine synthetic cases labelled by the project author,
+not by an independent reviewer. Strict scores were close and the sample is tiny, so
+it shows no accuracy and no advantage of the council over one model. Failures
+occurred and are reported: free-model rate limits (HTTP 429) and rejected outputs
+produce partial reports, never invented conclusions. See
+[the live test notes](docs/LIVE_REVIEW_TEST.md).
+
+Review family labels are configuration assertions, not verified independence.
+Human corrections, report deletion/retention controls and a held-out,
+independently labelled evaluation remain pending. Real Google Meet import has not
+been tested with a Google account.
 
 ## Run locally
 
@@ -199,10 +239,10 @@ and [recorded development evaluations](eval_results/README.md).
 `Dockerfile` installs the complete dependency set, runs as uid 1000 (as Hugging Face
 Spaces does), downloads the local embedding model and indexes the study-summary
 corpus at build time, then starts one `app.main:app` worker on port 8080. `.env`,
-`.data/` and observation artifacts are excluded from the image. The image has not
-been built or deployed yet; the repository does not claim a working public URL.
+`.data/` and observation artifacts are excluded from the image. The image builds and runs on a Hugging Face Docker Space (see the live demo
+above).
 
-### Intended public demo configuration
+### Public demo configuration
 
 No model key is set on a public Space, so nobody else can spend its quota or send
 transcripts to a model provider.
