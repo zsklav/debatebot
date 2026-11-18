@@ -9,8 +9,21 @@ short_description: Evidence-backed debates and post-interview review
 
 # DebateBot · Review Council
 
-An AI application for challenging arguments and reviewing evidence from completed
-interviews. Built with **FastAPI, LangGraph, LangChain, Qdrant and PostgreSQL**.
+**After an interview, get an evidence report: for each skill, the candidate's exact
+words, checked by code.** Built with **FastAPI, LangGraph, LangChain, Qdrant and
+PostgreSQL**.
+
+| Step | What happens | Model calls |
+|---|---|---|
+| 1. Import | Paste a transcript, or import VTT / Meet JSON in the Notebook | 0 |
+| 2. Pick a role | Choose a preset (backend, frontend, ML) or write up to 3 skills | 0 |
+| 3. Preview | See the exact transcript pieces that will be sent | 0 |
+| 4. Review | Local retrieval picks evidence; two reviewers assess it; a judge reconciles | up to 3 |
+| 5. Report | Each skill: status, exact quotes, agreement. A person makes every decision | 0 |
+
+Every quote must appear word for word in a candidate answer, or the report rejects
+it. The tool never recommends hiring or ranks people. The debate workspace is a
+separate practice tool in the same app.
 
 ## Live demo
 
@@ -20,9 +33,11 @@ Council** and use **Try a sample**.
 
 Limits of the public demo:
 
-- **Scripted, not live models.** The Review Council sample uses scripted outputs and
-  is labelled synthetic. The retrieval, graph and validation steps are real. No model
-  key is configured, so nobody can spend quota or send transcripts to a provider.
+- **Scripted sample by default.** The Review Council sample uses scripted outputs and
+  is labelled synthetic. The retrieval, graph and validation steps are real. Live
+  reviews run only when the Space owner adds a free-model key, with a daily cap
+  ([how to turn them on](docs/HF_SPACE_LIVE_REVIEW.md)). The `/review` page shows
+  whether live reviews are on and how many are left today.
 - **Debate, research and AI notes are off** (they need a Groq key).
 - **Storage is volatile.** Without a database, accounts and saved reports disappear
   when the Space restarts or sleeps.

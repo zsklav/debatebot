@@ -61,6 +61,33 @@
       element('pre', JSON.stringify(report.audit, null, 2)), element('p', report.scope, 'review-scope'));
     root.append(audit);
   }
+  // Local templates only: choosing one makes no request and still needs preview and consent.
+  const PRESETS = {
+    backend: {job: 'Backend engineering intern: build and maintain HTTP APIs, design relational data, and keep writes safe under concurrent use.',
+      criteria: [['API design', 'Explain how endpoints, validation and error responses were designed, with trade-offs.'],
+        ['Databases', 'Describe schema design, constraints, transactions or migrations used in real work.'],
+        ['Debugging', 'Walk through a real bug: how it was found, the cause and the fix.']]},
+    frontend: {job: 'Frontend engineering intern: build accessible, responsive user interfaces and connect them to APIs.',
+      criteria: [['UI building', 'Explain how components, state and layout were built for a real feature.'],
+        ['API integration', 'Describe how the interface called APIs and handled loading and error states.'],
+        ['Accessibility', 'Describe concrete steps taken for keyboard use, labels or contrast.']]},
+    ml: {job: 'ML / AI engineering intern: build and evaluate model-backed features, including retrieval and LLM output checks.',
+      criteria: [['Retrieval', 'Explain how documents were chunked, embedded and retrieved, and why.'],
+        ['Evaluation', 'Describe how model output quality was measured and what the results showed.'],
+        ['LLM safety', 'Explain checks against invented output, prompt injection or unsafe use.']]},
+  };
+  function applyPreset(name, byId) {
+    const preset = PRESETS[name];
+    if (!preset) return false;
+    byId('review-job').value = preset.job;
+    for (let n = 1; n <= 3; n++) {
+      const [label, description] = preset.criteria[n - 1] || ['', ''];
+      byId(`criterion-name-${n}`).value = label; byId(`criterion-description-${n}`).value = description;
+    }
+    const optional = document.querySelector('.optional-criteria');
+    if (optional) optional.open = true;
+    return true;
+  }
   function init() {
     const byId = id => document.getElementById(id);
     const form = byId('review-form');
@@ -79,7 +106,7 @@
     function ready() { byId('review-run').disabled = busy || !configured || !byId('review-consent').checked || prepared !== JSON.stringify(payload()); }
     function controls(disabled) {
       busy = disabled;
-      for (const node of form.querySelectorAll('input,textarea,button')) node.disabled = disabled;
+      for (const node of form.querySelectorAll('input,textarea,button,select')) node.disabled = disabled;
       byId('review-demo').disabled = byId('review-reopen').disabled = disabled;
       ready();
     }
@@ -110,7 +137,10 @@
     }
     function unlinkNotebook() { notebookId = null; byId('review-origin').hidden = true; byId('review-origin').replaceChildren(); }
     form.addEventListener('input', event => {
-      if (event.target.id === 'review-consent') ready();
+      if (event.target.id === 'review-preset') {
+        if (applyPreset(event.target.value, byId)) { invalidate(); status.textContent = 'Preset filled. Edit it if needed, then preview the sources.'; }
+      }
+      else if (event.target.id === 'review-consent') ready();
       else { if (event.target.id === 'review-transcript') unlinkNotebook(); invalidate(); }
     });
     byId('review-file').addEventListener('change', () => task(async current => {
@@ -163,7 +193,8 @@
         request('/api/reviews/configuration').then(data => {
           if (current !== epoch) return;
           configured = data.configured;
-          byId('review-configuration').textContent = configured ? '' : 'Model setup required for live reviews.';
+          byId('review-configuration').textContent = !configured ? 'Model setup required for live reviews.'
+            : data.daily_limit ? `Live reviews left today: ${data.daily_remaining} of ${data.daily_limit}.` : '';
           byId('review-models').textContent = configured ? data.models.map(m => `${m.provider} / ${m.model}`).join(' · ')
             : 'No model providers connected.';
           ready();

@@ -264,6 +264,40 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code,400)
         models.assert_not_called()
 
+    def live_run(self, transcript_suffix=''):
+        body = {**demo.SAMPLE, 'transcript': demo.SAMPLE['transcript'] + transcript_suffix,
+                'consent_to_external_processing': True, 'evidence_confirmed': True}
+        return self.client.post('/api/reviews/run', json=body, headers=self.headers)
+
+    def test_daily_limit_blocks_new_live_runs_but_not_cached_repeats(self):
+        routes = [ModelRoute(r, 'openrouter', f'model-{r}:free', f'family-{r}', 'k') for r in ('a', 'b', 'judge')]
+        report = lambda *a, **k: {'status': 'complete', 'demo': False, 'final': {}, 'reviews': []}
+        with patch.dict(os.environ, {'POST_REVIEW_DAILY_LIMIT': '1'}), \
+             patch('app.review.routes.configuration', return_value=routes), \
+             patch('app.review.routes.evaluate', side_effect=report) as running:
+            first = self.live_run()
+            repeat = self.live_run()
+            blocked = self.live_run('\nCandidate: One more answer.')
+            settings = self.client.get('/api/reviews/configuration', headers=self.headers).json()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(repeat.status_code, 200)
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(running.call_count, 1)
+        self.assertEqual((settings['daily_limit'], settings['daily_remaining']), (1, 0))
+
+    def test_daily_limit_resets_on_a_new_day_and_rejects_bad_values(self):
+        from app.review.routes import DailyBudget, daily_limit
+        day = ['2026-11-18']
+        budget = DailyBudget(clock=lambda: day[0])
+        self.assertTrue(budget.take(1))
+        self.assertFalse(budget.take(1))
+        day[0] = '2026-11-19'
+        self.assertTrue(budget.take(1))
+        self.assertTrue(DailyBudget().take(0))
+        for bad in ('-1', 'ten', '1001'):
+            with patch.dict(os.environ, {'POST_REVIEW_DAILY_LIMIT': bad}), self.assertRaises(ReviewConfigurationError):
+                daily_limit()
+
     def test_sample_report_is_saved_reused_and_cannot_be_reopened_by_another_owner(self):
         real = evaluate
         with patch('app.review.routes.evaluate', side_effect=lambda *a,**k:real(*a,encoder=Encoder(),**k)) as running:

@@ -31,6 +31,7 @@
         <div class="review-input-grid">
         <section class="review-source-inputs" aria-label="Interview sources">
         <h2>Interview sources</h2>
+        <label for="review-preset">Role preset</label><select id="review-preset"><option value="">Write my own</option><option value="backend">Backend intern</option><option value="frontend">Frontend intern</option><option value="ml">ML / AI intern</option></select>
         <label for="review-job">Job description</label><textarea id="review-job" rows="3" minlength="20" maxlength="3000" required placeholder="The role and its job-related responsibilities…"></textarea>
         <div class="field-heading"><label for="review-transcript">Completed interview transcript</label><label class="file-import">Import .txt<input id="review-file" type="file" accept=".txt,.md,text/plain,text/markdown" /></label></div>
         <textarea id="review-transcript" rows="7" minlength="30" maxlength="60000" required placeholder="[00:12] Interviewer: How did you implement caching?&#10;[00:19] Candidate: I used Redis with a 60-second TTL…"></textarea>
